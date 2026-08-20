@@ -1,119 +1,119 @@
 {
   "scale_sweep": {
     "grid_hash": {
-      "2000": 0.4942,
-      "10000": 0.8314,
-      "50000": 1.7236,
-      "200000": 6.6384
+      "2000": 0.1972,
+      "10000": 0.3306,
+      "50000": 1.3455,
+      "200000": 4.4273
     },
     "linear_scan": {
-      "2000": 0.5723,
-      "10000": 2.1021,
-      "50000": 8.8906,
-      "200000": 65.5004
+      "2000": 0.3545,
+      "10000": 1.258,
+      "50000": 9.3589,
+      "200000": 53.9575
     },
     "scan/grid ratio": {
-      "2000": 1.1579,
-      "10000": 2.5286,
-      "50000": 5.1583,
-      "200000": 9.8669
+      "2000": 1.7976,
+      "10000": 3.8056,
+      "50000": 6.9557,
+      "200000": 12.1876
     }
   },
   "geo_benchmark": [
     {
       "updates_per_query": 5,
       "index": "linear_scan",
-      "update_us": 4.9852,
-      "query_ms": 1.3873,
-      "query_qps": 720.8077,
+      "update_us": 8.6489,
+      "query_ms": 1.2866,
+      "query_qps": 777.2681,
       "recall_vs_exact": 1.0
     },
     {
       "updates_per_query": 5,
       "index": "kdtree",
-      "update_us": 7.6827,
-      "query_ms": 0.7448,
-      "query_qps": 1342.6291,
+      "update_us": 5.2752,
+      "query_ms": 0.4224,
+      "query_qps": 2367.5457,
       "recall_vs_exact": 0.9872
     },
     {
       "updates_per_query": 5,
       "index": "grid_hash",
-      "update_us": 17.1403,
-      "query_ms": 0.5524,
-      "query_qps": 1810.4048,
+      "update_us": 9.1846,
+      "query_ms": 0.4007,
+      "query_qps": 2495.8548,
       "recall_vs_exact": 1.0
     },
     {
       "updates_per_query": 5,
       "index": "hex_h3",
-      "update_us": 39.9788,
-      "query_ms": 0.8591,
-      "query_qps": 1163.9912,
+      "update_us": 34.4798,
+      "query_ms": 0.7287,
+      "query_qps": 1372.2227,
       "recall_vs_exact": 1.0
     },
     {
       "updates_per_query": 50,
       "index": "linear_scan",
-      "update_us": 6.071,
-      "query_ms": 1.6199,
-      "query_qps": 617.3127,
+      "update_us": 2.8596,
+      "query_ms": 1.0008,
+      "query_qps": 999.1574,
       "recall_vs_exact": 1.0
     },
     {
       "updates_per_query": 50,
       "index": "kdtree",
-      "update_us": 9.2474,
-      "query_ms": 0.7571,
-      "query_qps": 1320.7673,
+      "update_us": 7.1245,
+      "query_ms": 0.4799,
+      "query_qps": 2083.863,
       "recall_vs_exact": 0.9839
     },
     {
       "updates_per_query": 50,
       "index": "grid_hash",
-      "update_us": 9.6833,
-      "query_ms": 0.8896,
-      "query_qps": 1124.1424,
+      "update_us": 6.2915,
+      "query_ms": 0.4568,
+      "query_qps": 2189.1307,
       "recall_vs_exact": 1.0
     },
     {
       "updates_per_query": 50,
       "index": "hex_h3",
-      "update_us": 41.7647,
-      "query_ms": 1.3354,
-      "query_qps": 748.8116,
+      "update_us": 27.1807,
+      "query_ms": 0.6677,
+      "query_qps": 1497.6973,
       "recall_vs_exact": 1.0
     },
     {
       "updates_per_query": 200,
       "index": "linear_scan",
-      "update_us": 5.0363,
-      "query_ms": 1.5421,
-      "query_qps": 648.4782,
+      "update_us": 2.7938,
+      "query_ms": 1.0747,
+      "query_qps": 930.5243,
       "recall_vs_exact": 1.0
     },
     {
       "updates_per_query": 200,
       "index": "kdtree",
-      "update_us": 11.0208,
-      "query_ms": 0.7881,
-      "query_qps": 1268.8681,
+      "update_us": 7.1291,
+      "query_ms": 0.5081,
+      "query_qps": 1968.0752,
       "recall_vs_exact": 0.9872
     },
     {
       "updates_per_query": 200,
       "index": "grid_hash",
-      "update_us": 8.5983,
-      "query_ms": 0.6479,
-      "query_qps": 1543.4862,
+      "update_us": 6.8564,
+      "query_ms": 0.584,
+      "query_qps": 1712.4343,
       "recall_vs_exact": 1.0
     },
     {
       "updates_per_query": 200,
       "index": "hex_h3",
-      "update_us": 38.9191,
-      "query_ms": 1.0616,
-      "query_qps": 941.9587,
+      "update_us": 26.6084,
+      "query_ms": 0.8236,
+      "query_qps": 1214.1246,
       "recall_vs_exact": 1.0
     }
   ],
@@ -122,7 +122,7 @@
     "offers": 3000,
     "wins": 500,
     "assigned": 500,
-    "races": 2490,
+    "races": 2491,
     "violations": []
   },
   "batching": [
@@ -249,5 +249,194 @@
       "delayed_signal": 326,
       "signal_lost": 1127
     }
-  }
+  },
+  "courier_agents": [
+    {
+      "surge": "off",
+      "market": "slack",
+      "utilisation": 0.45,
+      "surge_mult": 1.0,
+      "offer_accept_rate": 0.7797,
+      "mean_depth": 1.2825,
+      "p90_depth": 2.0,
+      "assign_rate": 1.0,
+      "mean_wait_s": 7.0625,
+      "mean_payout": 6.1945
+    },
+    {
+      "surge": "off",
+      "market": "normal",
+      "utilisation": 0.7,
+      "surge_mult": 1.0,
+      "offer_accept_rate": 0.7648,
+      "mean_depth": 1.3075,
+      "p90_depth": 2.0,
+      "assign_rate": 1.0,
+      "mean_wait_s": 7.6875,
+      "mean_payout": 6.2708
+    },
+    {
+      "surge": "off",
+      "market": "tight",
+      "utilisation": 0.88,
+      "surge_mult": 1.0,
+      "offer_accept_rate": 0.7477,
+      "mean_depth": 1.3375,
+      "p90_depth": 2.0,
+      "assign_rate": 1.0,
+      "mean_wait_s": 8.4375,
+      "mean_payout": 6.447
+    },
+    {
+      "surge": "on",
+      "market": "slack",
+      "utilisation": 0.45,
+      "surge_mult": 1.0,
+      "offer_accept_rate": 0.7797,
+      "mean_depth": 1.2825,
+      "p90_depth": 2.0,
+      "assign_rate": 1.0,
+      "mean_wait_s": 7.0625,
+      "mean_payout": 6.1945
+    },
+    {
+      "surge": "on",
+      "market": "normal",
+      "utilisation": 0.7,
+      "surge_mult": 1.22,
+      "offer_accept_rate": 0.8715,
+      "mean_depth": 1.1475,
+      "p90_depth": 2.0,
+      "assign_rate": 1.0,
+      "mean_wait_s": 3.6875,
+      "mean_payout": 7.6281
+    },
+    {
+      "surge": "on",
+      "market": "tight",
+      "utilisation": 0.88,
+      "surge_mult": 1.616,
+      "offer_accept_rate": 0.9756,
+      "mean_depth": 1.025,
+      "p90_depth": 1.0,
+      "assign_rate": 1.0,
+      "mean_wait_s": 0.625,
+      "mean_payout": 10.3218
+    }
+  ],
+  "batching_sweep": [
+    {
+      "market": "slack",
+      "window_s": 0,
+      "utilisation": 0.45,
+      "greedy_km": 0.1559,
+      "batched_km": 0.1559,
+      "improvement_pct": 0.0,
+      "worst_case_improvement_pct": 0.0
+    },
+    {
+      "market": "slack",
+      "window_s": 30,
+      "utilisation": 0.45,
+      "greedy_km": 0.1609,
+      "batched_km": 0.1604,
+      "improvement_pct": 0.3062,
+      "worst_case_improvement_pct": 1.0984
+    },
+    {
+      "market": "slack",
+      "window_s": 60,
+      "utilisation": 0.45,
+      "greedy_km": 0.1626,
+      "batched_km": 0.1616,
+      "improvement_pct": 0.5744,
+      "worst_case_improvement_pct": 0.8164
+    },
+    {
+      "market": "normal",
+      "window_s": 0,
+      "utilisation": 0.7,
+      "greedy_km": 0.1996,
+      "batched_km": 0.1996,
+      "improvement_pct": 0.0,
+      "worst_case_improvement_pct": 0.0
+    },
+    {
+      "market": "normal",
+      "window_s": 30,
+      "utilisation": 0.7,
+      "greedy_km": 0.2213,
+      "batched_km": 0.2201,
+      "improvement_pct": 0.524,
+      "worst_case_improvement_pct": 0.0163
+    },
+    {
+      "market": "normal",
+      "window_s": 60,
+      "utilisation": 0.7,
+      "greedy_km": 0.2253,
+      "batched_km": 0.2219,
+      "improvement_pct": 1.4706,
+      "worst_case_improvement_pct": 2.6453
+    },
+    {
+      "market": "tight",
+      "window_s": 0,
+      "utilisation": 0.88,
+      "greedy_km": 0.3379,
+      "batched_km": 0.3379,
+      "improvement_pct": 0.0,
+      "worst_case_improvement_pct": 0.0
+    },
+    {
+      "market": "tight",
+      "window_s": 30,
+      "utilisation": 0.88,
+      "greedy_km": 0.3714,
+      "batched_km": 0.3661,
+      "improvement_pct": 1.433,
+      "worst_case_improvement_pct": 2.3468
+    },
+    {
+      "market": "tight",
+      "window_s": 60,
+      "utilisation": 0.88,
+      "greedy_km": 0.3994,
+      "batched_km": 0.3811,
+      "improvement_pct": 4.5678,
+      "worst_case_improvement_pct": 5.8584
+    },
+    {
+      "market": "very tight",
+      "window_s": 0,
+      "utilisation": 0.95,
+      "greedy_km": 0.6237,
+      "batched_km": 0.6237,
+      "improvement_pct": 0.0,
+      "worst_case_improvement_pct": 0.0
+    },
+    {
+      "market": "very tight",
+      "window_s": 30,
+      "utilisation": 0.95,
+      "greedy_km": 0.6371,
+      "batched_km": 0.6032,
+      "improvement_pct": 5.3227,
+      "worst_case_improvement_pct": 5.4938
+    },
+    {
+      "market": "very tight",
+      "window_s": 60,
+      "utilisation": 0.95,
+      "greedy_km": 0.8324,
+      "batched_km": 0.7135,
+      "improvement_pct": 14.2795,
+      "worst_case_improvement_pct": 24.5769
+    }
+  ],
+  "runbook_sections": [
+    "MATCHING SERVICE DOWN",
+    "GPS BLACKOUT / STALE LOCATIONS",
+    "ACCEPT RATE COLLAPSE"
+  ]
 }

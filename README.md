@@ -1,14 +1,15 @@
 # SE-3 — Real-Time Delivery Tracking & Dispatch
 
-**This is not deployable.** It is the first ~20% of the spec: a defended geo-index
-choice, the assignment invariant under concurrency, an ETA with a measured error
-distribution, and the degraded-mode behaviour that decides whether tracking helps
-or generates tickets. No map, no WebSocket, no road network. Missing 80% at the
-bottom.
+**Roughly 50% of the spec.** A defended geo-index choice, the assignment
+invariant under concurrency, a calibrated ETA and the degraded-mode behaviour -
+plus the three things the first pass named as missing: **courier agents that
+decline** (its own "biggest fidelity gap"), the batching sweep it called its
+missing experiment, and an on-call runbook. No map, no WebSocket, no road
+network; what remains is named at the bottom.
 
 ```bash
-python run_dispatch.py      # ~4min
-python -m pytest tests -q   # 17 tests, ~45s
+python run_dispatch.py      # ~2min
+python -m pytest tests -q   # 38 tests
 ```
 
 ## Geo index, benchmarked and defended
@@ -154,21 +155,96 @@ prevent. And `smooth_eta` damps *decreases* while letting *increases* through
 almost undamped: a customer facing 20 extra minutes needs to know now, while they
 can still act. Good news can wait; bad news cannot.
 
-## The other 80% — what is NOT here
+## Second pass: three gaps the first pass named
+
+### Couriers that decline - the fidelity gap, closed
+
+The first pass called couriers "a capacity pool with a service-time distribution"
+and named that as its biggest fidelity gap. It was: the offer flow was exercised
+by test threads that always accepted, so **offer-accept rate, time-to-assign and
+re-offer depth** - the three numbers a dispatch team watches - could not be
+measured at all.
+
+Couriers are now agents. They decline offers that are too far for too little, get
+pickier through the shift, and go offline. A re-offer cascade walks the ranked
+candidate list until someone accepts, and **each decline costs its TTL in wall
+clock** - so cascade depth *is* time-to-assign.
+
+| surge | market | accept rate | mean depth | mean wait | mean payout |
+|---|---|---|---|---|---|
+| off | slack | 0.780 | 1.28 | 7.1s | — |
+| off | normal | 0.765 | 1.31 | 7.7s | — |
+| off | **tight** | **0.748** | 1.34 | **8.4s** | $6.45 |
+| on | **tight** | **0.976** | 1.02 | **0.6s** | **$10.32** |
+
+**Surge is the only lever that moves acceptance.** Routing cannot conjure
+couriers - a better index finds the nearest available one faster and it is still
+the same courier saying no. Surge buys acceptance and **the price is on the same
+table**: a dispatch team reporting accept rate without payout is reporting half a
+metric.
+
+*A calibration bug worth keeping:* acceptance first keyed on **$/km**, and every
+courier accepted everything - because in a dense metro the marginal offer is 200
+metres away and $6/0.2km is an absurd rate. The metric said the job was wonderful
+when it was eleven minutes of waiting for six dollars. It now keys on **$/hour**
+with a fixed per-job overhead, which is why couriers dislike tiny orders and why
+per-drop pay without a distance term selects exactly wrong.
+
+### Batching swept over utilisation - the missing experiment
+
+Section 3 measured batching at one supply level, found 1.3%, and said plainly the
+number was small *because the fleet was slack* - and that its value is a function
+of utilisation, which the run did not sweep. It called that the missing
+experiment. At a 60-second window:
+
+| market | utilisation | mean improvement | worst-case improvement |
+|---|---|---|---|
+| slack | 0.45 | +0.57% | +0.82% |
+| normal | 0.70 | +1.47% | +2.65% |
+| tight | 0.88 | +4.57% | +5.86% |
+| **very tight** | **0.95** | **+14.28%** | **+24.58%** |
+
+**Batching's value is a function of scarcity**, now measured rather than
+asserted. The first pass's 1.3% was measured in the slack regime and correctly
+reported as small - and reading it as "batching isn't worth it" would have been
+the wrong conclusion from a right number, which is exactly what a
+single-operating-point benchmark invites.
+
+The worst-case column moves more than the mean throughout. **Batching's real
+product is tail control**: greedy's failure mode is that an early order takes the
+courier a later, closer order needed, and that shows up as one very long pickup
+rather than a slightly worse average.
+
+### On-call runbook
+
+Prose, deliberately - a runbook is read at 3am by someone who did not write the
+system. Three sections matching the three drills: **matching service down**
+(confirm orders are queuing not erroring; the queue is the design), **GPS
+blackout** (check the ingest partition before blaming 20% of phones; do not
+"fix" the map by rendering last-known as live), and **accept-rate collapse**
+(this is a supply problem and routing cannot fix it; the lever is surge, which is
+a business decision with a number attached, not an incident action).
+
+## The other ~50% - what is still NOT here
 
 - **No road network.** No OSM extract, no OSRM — distances are haversine, so
   every ETA is optimistic by whatever the local street grid costs.
 - **No WebSocket, no map, no reconnect/catch-up.** The tracking surface is a
   state machine and a rendered message, not a client.
-- **Couriers do not accept, decline, or go offline mid-delivery.** The offer flow
-  is exercised by test threads, not by simulated courier behaviour, so
-  offer-accept rate and re-offer depth are not measured.
-- **No re-offer cascade** — an unaccepted offer expires and nothing escalates.
-- **No ops metrics or runbook.** The spec asks for dispatch dashboards
-  (time-to-assign, re-offer depth, utilisation) and an on-call runbook for the
-  three drills; neither exists.
-- **Batching is never swept over utilisation**, which the section itself
-  identifies as the experiment that would make its number meaningful.
+- **Courier agents are not wired into the main simulation loop** - they drive
+  the cascade benchmark in section 6, but sections 1-5 still use the static
+  availability mask, so the geo benchmark and the ETA evaluation do not see
+  declines or offline couriers.
+- **No dispatch dashboard.** The runbook references metrics the report computes;
+  nothing renders or alerts on them.
+- **No courier repositioning.** Couriers do not move toward demand between jobs,
+  which is the behaviour that makes courier-incentive experiments hard (and the
+  carryover mechanism DATA-3 reasons about qualitatively).
+- **Surge is a function of instantaneous utilisation only** - no forecast, no
+  hysteresis, so it would oscillate in a real control loop.
+- **The surge cap is inert** at the configured slope (utilisation 1.0 gives
+  1.88 against a 2.5 ceiling); a test pins that so a future steeper slope makes
+  it visible rather than silent.
 - **The ETA model is route-time + prep + queue.** No traffic, no historical
   per-restaurant prep distributions, no learned model.
 - **Single process, single metro, no persistence.** The queue-and-drain drill is

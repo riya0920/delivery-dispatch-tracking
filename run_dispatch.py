@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from src import couriers as CR  # noqa: E402
 from src import dispatch as D  # noqa: E402
 from src import eta as E  # noqa: E402
 from src import geo as G  # noqa: E402
@@ -463,6 +464,215 @@ def main():
         interval_width_before=width_before, interval_width_after=width_after,
         tracking_states={k: states.count(k)
                          for k in ("live", "delayed_signal", "signal_lost")})
+
+    # ================================================================== 6
+    emit("")
+    emit("=" * 78)
+    emit("6. COURIERS THAT DECLINE -- THE FIDELITY GAP, CLOSED")
+    emit("=" * 78)
+    emit("The first pass called couriers 'a capacity pool with a service-time")
+    emit("distribution' and named that as its biggest fidelity gap. It was: the")
+    emit("offer flow was exercised by test threads that always accepted, so")
+    emit("offer-accept rate, time-to-assign and re-offer depth -- the three numbers")
+    emit("a dispatch team actually watches -- could not be measured at all.")
+    emit("")
+    emit("Couriers are now agents. They decline offers that are too far for too")
+    emit("little, get pickier as the shift wears on, and go offline. Acceptance is")
+    emit("logistic in PAYOUT PER KM, because a 2km trip for $6 and a 6km trip for")
+    emit("$18 are the same deal -- which is why every real platform's lever is")
+    emit("payout, not routing.")
+    emit("")
+    fleet_rng = np.random.default_rng(77)
+    agents = CR.make_fleet(N_COURIERS, fleet_rng)
+    picks = np.array([a.pickiness for a in agents.values()])
+    emit("Fleet pickiness ($/km bar): p10 %.2f  median %.2f  p90 %.2f"
+         % (np.percentile(picks, 10), np.median(picks), np.percentile(picks, 90)))
+    emit("")
+    emit("Heterogeneity matters because the MARGINAL offer goes to the pickiest")
+    emit("courier still available, so effective supply is smaller than headcount.")
+    emit("")
+
+    idx = G.GridHash(lat.copy(), lon.copy(), available)
+    rows = []
+    for surge_on in (False, True):
+        for util_label, avail_frac in (("slack", 0.55), ("normal", 0.30),
+                                       ("tight", 0.12)):
+            r5 = np.random.default_rng(21)
+            av = r5.random(N_COURIERS) < avail_frac
+            idx2 = G.GridHash(lat.copy(), lon.copy(), av)
+            ag = CR.make_fleet(N_COURIERS, np.random.default_rng(77))
+            util = 1.0 - avail_frac
+            surge = CR.surge_for(util) if surge_on else 1.0
+
+            depths, waits, assigned, dists, payouts = [], [], 0, [], []
+            for j in range(400):
+                o = D.Order(j, CITY[0] + r5.normal(0, 0.03),
+                            CITY[1] + r5.normal(0, 0.03), 0.0, 8.0)
+                cands = idx2.query(o.lat, o.lon, k=8, radius_km=6.0)
+                res = CR.cascade_assign(o, cands, ag, lat, lon, surge=surge)
+                depths.append(res["depth"])
+                waits.append(res["offer_seconds"])
+                if res["assigned_to"] is not None:
+                    assigned += 1
+                    dists.append(res["distance_km"])
+                    payouts.append(res["payout"] * surge)
+            seen = sum(a.offers_seen for a in ag.values())
+            took = sum(a.offers_accepted for a in ag.values())
+            rows.append(dict(
+                surge=("on" if surge_on else "off"), market=util_label,
+                utilisation=util, surge_mult=surge,
+                offer_accept_rate=took / max(seen, 1),
+                mean_depth=float(np.mean(depths)),
+                p90_depth=float(np.percentile(depths, 90)),
+                assign_rate=assigned / 400,
+                mean_wait_s=float(np.mean(waits)),
+                mean_payout=float(np.mean(payouts)) if payouts else float("nan")))
+    CA = pd.DataFrame(rows).set_index(["surge", "market"])
+    emit(CA.to_string(float_format=lambda x: "%12.4f" % x))
+    emit("")
+    emit("THE CASCADE CONVERTS DECLINES INTO WAITING. Each declined offer costs")
+    emit("its TTL in wall clock, so depth IS time-to-assign -- which is why depth")
+    emit("is worth measuring and not just accept rate. Read the two together:")
+    for (sg, mk_) in CA.index:
+        r = CA.loc[(sg, mk_)]
+        emit("  surge %-3s %-7s accept %.3f  mean depth %.2f  wait %5.1fs  assigned %.3f"
+             % (sg, mk_, r.offer_accept_rate, r.mean_depth, r.mean_wait_s,
+                r.assign_rate))
+    emit("")
+    off = CA.loc["off"]
+    on = CA.loc["on"]
+    emit("SURGE IS THE ONLY LEVER THAT MOVES ACCEPTANCE, and the tight market is")
+    emit("where that shows. Routing cannot conjure couriers; a better index finds")
+    emit("the nearest available one faster and it is still the same courier saying")
+    emit("no. Comparing the tight rows:")
+    emit("  accept rate   %.3f -> %.3f" % (off.loc["tight", "offer_accept_rate"],
+                                           on.loc["tight", "offer_accept_rate"]))
+    emit("  assign rate   %.3f -> %.3f" % (off.loc["tight", "assign_rate"],
+                                           on.loc["tight", "assign_rate"]))
+    emit("  mean wait     %.1fs -> %.1fs" % (off.loc["tight", "mean_wait_s"],
+                                             on.loc["tight", "mean_wait_s"]))
+    emit("  mean payout   %.2f -> %.2f" % (off.loc["tight", "mean_payout"],
+                                           on.loc["tight", "mean_payout"]))
+    emit("")
+    emit("That last row is the point: surge BUYS acceptance and the price is on the")
+    emit("same table. A dispatch team that reports accept rate without payout is")
+    emit("reporting half a metric.")
+    summary["courier_agents"] = CA.reset_index().round(4).to_dict("records")
+
+    # ================================================================== 7
+    emit("")
+    emit("=" * 78)
+    emit("7. BATCHING SWEPT OVER UTILISATION -- THE MISSING EXPERIMENT")
+    emit("=" * 78)
+    emit("Section 3 measured batching at one supply level, found a 1.3% gain, and")
+    emit("said plainly that the number was small BECAUSE the fleet was slack --")
+    emit("and that its value is a function of utilisation, which the run did not")
+    emit("sweep. That sweep was named as the missing experiment. Here it is.")
+    emit("")
+    rows = []
+    for label, avail_frac in (("slack", 0.55), ("normal", 0.30),
+                              ("tight", 0.12), ("very tight", 0.05)):
+        r6 = np.random.default_rng(31)
+        av = r6.random(N_COURIERS) < avail_frac
+        for window_s in (0, 30, 60):
+            n_batch = max(1, int(window_s * 1.2))
+            g_d, b_d, g_max, b_max = [], [], [], []
+            for trial in range(40):
+                r7 = np.random.default_rng(4000 + trial)
+                orders = [D.Order(j, CITY[0] + r7.normal(0, 0.03),
+                                  CITY[1] + r7.normal(0, 0.03), 0.0, 8.0)
+                          for j in range(n_batch)]
+                gm = D.greedy_match(orders, lat, lon, av)
+                bm = D.batched_match(orders, lat, lon, av)
+                for assign, acc, mx in ((gm, g_d, g_max), (bm, b_d, b_max)):
+                    ds = [G.haversine(lat[c], lon[c], o.lat, o.lon)
+                          for o in orders
+                          if (c := assign.get(o.order_id)) is not None]
+                    if ds:
+                        acc.append(float(np.mean(ds)))
+                        mx.append(float(np.max(ds)))
+            if not g_d or not b_d:
+                continue
+            rows.append(dict(
+                market=label, utilisation=1 - avail_frac, window_s=window_s,
+                greedy_km=np.mean(g_d), batched_km=np.mean(b_d),
+                improvement_pct=100 * (1 - np.mean(b_d) / np.mean(g_d)),
+                worst_case_improvement_pct=100 * (1 - np.mean(b_max) / np.mean(g_max))))
+    SW = pd.DataFrame(rows).set_index(["market", "window_s"])
+    emit(SW.to_string(float_format=lambda x: "%12.4f" % x))
+    emit("")
+    emit("BATCHING'S VALUE IS A FUNCTION OF SCARCITY, and now it is measured")
+    emit("rather than asserted. At a 60-second window:")
+    for label in ("slack", "normal", "tight", "very tight"):
+        if (label, 60) in SW.index:
+            r = SW.loc[(label, 60)]
+            emit("  %-11s utilisation %.2f   mean %+.2f%%   worst-case %+.2f%%"
+                 % (label, r.utilisation, r.improvement_pct,
+                    r.worst_case_improvement_pct))
+    emit("")
+    emit("The first pass's 1.3%% was measured in the slack regime and was")
+    emit("correctly reported as small. Reading it as 'batching is not worth it'")
+    emit("would have been the wrong conclusion from a right number -- which is")
+    emit("exactly what a single-operating-point benchmark invites.")
+    emit("")
+    emit("The worst-case column moves more than the mean throughout. Batching's")
+    emit("real product is TAIL control: greedy's failure mode is that an early")
+    emit("order takes the courier a later, closer order needed, and that shows up")
+    emit("as one very long pickup rather than a slightly worse average.")
+    summary["batching_sweep"] = SW.reset_index().round(4).to_dict("records")
+
+    # ================================================================== 8
+    emit("")
+    emit("=" * 78)
+    emit("8. ON-CALL RUNBOOK")
+    emit("=" * 78)
+    emit("The spec asks for a runbook for the three drills. Prose, deliberately --")
+    emit("a runbook is read at 3am by someone who did not write the system.")
+    emit("")
+    runbook = [
+        ("MATCHING SERVICE DOWN",
+         ["Symptom: time-to-assign climbing, assign rate falling, queue depth up.",
+          "First: confirm orders are QUEUING and not erroring. The queue is the",
+          "  design -- dispatch may be down, it may not lose an order.",
+          "Do NOT restart the matcher until the queue is drained or you will",
+          "  process the backlog twice unless assignment is idempotent (it is:",
+          "  exactly-one-assignment is enforced by CAS, section 2).",
+          "Customer message stays 'finding you a courier', which remains true.",
+          "Measured drain: 144 orders queued in a 120s outage cleared in 52s at",
+          "  4 orders/s. If drain is not keeping up, shed by widening the offer",
+          "  radius before you shed by dropping orders."]),
+        ("GPS BLACKOUT / STALE LOCATIONS",
+         ["Symptom: share of couriers in 'delayed_signal' or 'signal_lost' rising.",
+          "ETAs widen automatically -- that is the intended behaviour, not a bug.",
+          "Check the LOCATION INGEST path before the courier app: a regional",
+          "  blackout is usually one ingest partition, not 20% of phones.",
+          "Do not 'fix' the map by rendering last-known as live. That is the",
+          "  WISMO failure: a frozen dot generates the ticket it was built to",
+          "  prevent.",
+          "Dispatch degrades to last-known position for matching, which is",
+          "  acceptable for minutes and not for tens of minutes -- if staleness",
+          "  exceeds the offer TTL, stop dispatching in that region."]),
+        ("ACCEPT RATE COLLAPSE",
+         ["Symptom: offer accept rate down, cascade depth up, time-to-assign up.",
+          "This is a SUPPLY problem and routing cannot fix it. Check, in order:",
+          "  1. payout config -- did a pricing change ship?",
+          "  2. courier headcount online vs the same hour last week",
+          "  3. weather and events -- both move acceptance more than anything",
+          "     engineering controls",
+          "The lever is surge (section 6): it measurably buys acceptance and the",
+          "  cost is on the same table. Raising it is a business decision with a",
+          "  number attached, not an incident action.",
+          "Escalate to ops if headcount is normal and acceptance is not --",
+          "  that combination usually means the offers themselves are wrong",
+          "  (bad ETAs, bad distances, an index returning couriers who cannot",
+          "  actually reach the pickup)."]),
+    ]
+    for title, steps in runbook:
+        emit("  %s" % title)
+        for st in steps:
+            emit("    %s" % st)
+        emit("")
+    summary["runbook_sections"] = [t for t, _ in runbook]
 
     emit("")
     emit("(%.0fs)" % (time.time() - t0))
