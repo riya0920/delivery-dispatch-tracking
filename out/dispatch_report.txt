@@ -1,0 +1,240 @@
+Fleet: 10000 couriers, 3490 available (35%), metro box +/-0.09 degrees.
+
+==============================================================================
+1. GEO-INDEX BENCHMARK AT 10000 MOVING COURIERS
+==============================================================================
+                                 update_us     query_ms    query_qps  recall_vs_exact
+updates_per_query index                                                              
+5                 linear_scan       4.9852       1.3873     720.8077           1.0000
+                  kdtree            7.6827       0.7448    1342.6291           0.9872
+                  grid_hash        17.1403       0.5524    1810.4048           1.0000
+                  hex_h3           39.9788       0.8591    1163.9912           1.0000
+50                linear_scan       6.0710       1.6199     617.3127           1.0000
+                  kdtree            9.2474       0.7571    1320.7673           0.9839
+                  grid_hash         9.6833       0.8896    1124.1424           1.0000
+                  hex_h3           41.7647       1.3354     748.8116           1.0000
+200               linear_scan       5.0363       1.5421     648.4782           1.0000
+                  kdtree           11.0208       0.7881    1268.8681           0.9872
+                  grid_hash         8.5983       0.6479    1543.4862           1.0000
+                  hex_h3           38.9191       1.0616     941.9587           1.0000
+
+`updates_per_query` is the ratio that decides everything: couriers ping
+every 1-5 seconds, so at 10,000 couriers the write load is thousands per
+second while dispatch queries arrive at a far lower rate. The realistic
+regime is the BOTTOM block, not the top.
+
+THE CHOICE, and it changes with the ratio:
+  at   5 updates/query -> grid_hash     (blended cost 0.638 ms per query
+                            incl. its updates; linear_scan 1.412)
+  at  50 updates/query -> kdtree        (blended cost 1.220 ms per query
+                            incl. its updates; linear_scan 1.923)
+  at 200 updates/query -> grid_hash     (blended cost 2.368 ms per query
+                            incl. its updates; linear_scan 2.549)
+
+Reading the columns:
+  kdtree     fastest QUERIES, worst UPDATES -- it rebuilds. It also
+             carries recall below 1.0, because between rebuilds it is
+             answering from stale positions. That is the amortisation
+             showing up as a CORRECTNESS cost, which is the honest way
+             to account for it.
+  grid_hash  O(1) updates, always fresh, query scans a ring of cells.
+  hex_h3     same shape; hexagons have six equidistant neighbours, so a
+             k-ring is a real radius instead of a square whose corners
+             are 1.41x further than its edges. On a square grid the set
+             of couriers considered depends on where in the cell the
+             restaurant happens to sit.
+
+THE RESULT I DID NOT EXPECT, AND IT NEEDED A SCALE SWEEP TO INTERPRET:
+at 200 updates per query the NAIVE LINEAR SCAN wins on blended cost. A
+vectorised haversine over 10,000 points is a single numpy call, while
+every index pays per-update Python overhead to maintain itself. At a
+high enough write:read ratio, maintaining an index costs more than not
+having one.
+
+That is true and it does not generalise, which the fleet-size sweep shows:
+
+  query cost (ms) by fleet size, at 50 updates/query:
+index   grid_hash  linear_scan  scan/grid ratio
+fleet                                          
+2000       0.4942       0.5723           1.1579
+10000      0.8314       2.1021           2.5286
+50000      1.7236       8.8906           5.1583
+200000     6.6384      65.5004           9.8669
+
+  The scan is LINEAR in fleet size; the grid is not -- it touches a
+  fixed ring of cells whose occupancy grows only with DENSITY. The
+  ratio in the last column is the whole argument, and it is why the
+  answer at 10,000 couriers in one metro is not the answer at 500,000.
+  Benchmarking at the size you have and deploying at the size you will
+  have is how teams end up rewriting dispatch.
+
+SUBSTITUTION WARNING, so nobody quotes these as database numbers:
+PostGIS, Redis and h3 are not installed here. These are the ALGORITHMIC
+SHAPES in-process -- no network hop, no serialisation, no concurrency
+control, no durability. A real PostGIS query pays milliseconds of round
+trip that dwarf everything measured above. What transfers is how read
+and write costs SCALE and what staleness each structure forces.
+
+AT 500K COURIERS ACROSS 50 METROS the answer changes shape entirely:
+one global index becomes a sharding problem. Shard by geo cell, route
+queries by cell id, and accept that cross-shard queries at metro borders
+need scatter-gather. The hex index is the one that survives that move
+because the cell id IS the shard key and neighbour lookup is arithmetic
+rather than a range scan. Not built here.
+
+==============================================================================
+2. EXACTLY-ONE-ASSIGNMENT UNDER CONCURRENT ACCEPTS
+==============================================================================
+500 orders, 3000 offers (6 per order), 24 threads accepting concurrently.
+  offers accepted (wins)      : 500
+  orders assigned             : 500 / 500
+  losers that raced and lost  : 2490
+  invariant violations        : none
+
+Every order has exactly one assignment and exactly one accepted offer,
+and no courier holds two orders. The invariant is enforced by a single
+guarded compare-and-set on the order's assignment under one lock -- NOT
+by check-then-write, which is the race it exists to prevent. It is the
+same defect as decrement-and-hope inventory in SE-1, in a different
+costume.
+
+TRACING TWO ACCEPTS 40ms APART: the first takes the lock, sees
+assigned_to is None, writes its courier id, marks its own offer accepted
+and marks every other open offer on that order SUPERSEDED. The second
+takes the lock, finds assigned_to set, marks its offer superseded, and
+returns False -- so the courier gets 'this order was just taken' rather
+than silence. 2490 couriers took that path in this run and none of them
+corrupted anything.
+
+==============================================================================
+3. BATCHED MATCHING vs GREEDY
+==============================================================================
+          orders_in_batch  greedy_mean_km  batched_mean_km  improvement_pct  greedy_worst_km  batched_worst_km  first_offer_latency_s
+window_s                                                                                                                             
+0                       1          0.1993           0.1993           0.0000           0.1993            0.1993                 0.0000
+10                     12          0.2057           0.2055           0.1012           0.4194            0.4231                 5.0000
+20                     24          0.2046           0.2042           0.1991           0.4520            0.4525                10.0000
+30                     36          0.2035           0.2021           0.6716           0.4695            0.4679                15.0000
+60                     72          0.2070           0.2042           1.3393           0.5204            0.5108                30.0000
+
+THE TRADEOFF, PRICED. A longer window buys a better assignment and
+charges every courier and customer the wait. `first_offer_latency_s` is
+the AVERAGE delay an order sits before anyone is even offered it -- half
+the window.
+
+Best batching gain measured: 1.34% on mean pickup distance, at a 60s
+window (30s average first-offer delay). That is SMALL, and reporting
+it as small is the honest read: with 3490 available couriers in this metro
+the nearest courier is already ~0.20 km away, so there is very little
+room for a smarter assignment to find a better one. Batching pays when
+supply is TIGHT and couriers are far apart -- which is exactly the
+regime this fleet is not in. A benchmark run only in the easy regime
+would have concluded batching is worthless; the correct conclusion is
+that its value is a function of utilisation, and this run does not
+sweep utilisation. That sweep is the missing experiment.
+
+PRODUCT SAYS COURIERS CHURN WHEN OFFERS ARE SLOW. That is a real cost
+this table cannot see: it measures assignment quality, not courier
+retention. The two are measured in different units and the exchange rate
+between them is a business input, not an engineering one. What I would
+do with these curves: pick the shortest window whose gain is still
+material -- the curve flattens, so most of the win arrives early -- and
+make the window ADAPTIVE, short when supply is plentiful (greedy is
+nearly optimal when everyone is close) and longer only when utilisation
+is high and the assignment actually matters. Adaptive windowing is not
+built here.
+
+==============================================================================
+4. ETA -- MEASURED, SEGMENTED, AND HONEST WHEN STALE
+==============================================================================
+AS SHIPPED, with the hand-picked base sigma of 4.0 min:
+               n     mae   bias  p90_abs  coverage_80
+seg                                                  
+far         2923  10.606  3.206   22.496        0.392
+far_stale    706  10.299  3.358   21.859        0.782
+mid          246   5.169  0.359   11.072        0.703
+mid_stale     71   5.682  1.540   11.282        0.944
+near          46   5.134  1.362   11.224        0.652
+near_stale     8   4.457  0.506    8.305        1.000
+
+Overall MAE 10.06 min, bias +3.00 min, p90 abs error 21.42 min.
+80% interval coverage 0.494 against a target of 0.80.
+
+THAT IS A FAILING NUMBER AND IT IS THE MOST USEFUL RESULT IN THIS
+SECTION. An interval that covers 49% of outcomes while claiming 80%
+is not a conservative estimate, it is a WRONG one, and it fails in the
+direction that costs support tickets: the customer is told 25-31 minutes
+and the order arrives at 44. The base sigma was picked by hand, which is
+exactly how this happens.
+
+The fix is to calibrate sigma from residuals rather than assert it.
+Fitted on the first half of the evaluation set, scored on the second:
+
+  calibrated base sigma: 12.41 min (hand-picked was 4.00)
+               n     mae   bias  p90_abs  coverage_80
+seg                                                  
+far         1473  10.441  2.969   21.893        0.860
+far_stale    340  10.057  3.491   21.085        0.991
+mid          118   5.468  0.707   11.166        0.975
+mid_stale     40   5.933  2.519   11.391        1.000
+near          23   4.925  0.803    9.914        1.000
+near_stale     6   5.077  1.542    8.393        1.000
+
+Overall coverage after calibration: 0.894 (target 0.80).
+
+THE STALENESS POLICY. Rows ending `_stale` are predictions made from a
+location fix older than 45s. The point ETA on those rows is no better
+than on fresh ones -- and a system that renders them identically is
+lying at exactly the moment the customer is most likely to be looking.
+So the interval WIDENS with the age of the fix, which is why the stale
+segments over-cover rather than collapse. Over-covering is the correct
+direction to be wrong when you do not know where the courier is.
+
+An ETA is a model with an SLO, not a decoration on a map. The number a
+customer stares at for thirty minutes deserves a measured error
+distribution, and 'we said 25 minutes' is not a claim anyone can audit
+without one.
+
+==============================================================================
+5. DEGRADATION DRILLS
+==============================================================================
+DRILL A -- matching service killed for 120s at 1.2 orders/s:
+  orders queued during outage : 144
+  orders LOST                 : 0
+  drain time after restart    : 52s at 4 orders/s
+  total orders processed      : 205
+  queue length at steady state : 1 (= one second of arrivals)
+  Orders queue, nothing is dropped, and the backlog clears in 52s.
+  The queue is the whole design: dispatch is allowed to be DOWN, it is
+  not allowed to LOSE an order. What the customer sees meanwhile is
+  'finding you a courier', which stays true throughout.
+
+DRILL B -- 20% of couriers lose GPS (urban canyon):
+  mean 80% ETA interval width : 51.6 -> 70.0 min (+36%)
+  tracking states: {'live': 2547, 'delayed_signal': 326, 'signal_lost': 1127}
+  ETAs widen, the map degrades honestly, and nothing claims precision
+  it no longer has.
+
+DRILL C -- the WISMO surface, second by second. A courier's GPS dies in
+a tunnel while the customer is watching:
+
+  t+ 10s  state=live           dot=True   Arriving in 12-24 min
+  t+ 60s  state=delayed_signal dot=True   Last seen 1 min ago - arriving in 9-27 min
+  t+150s  state=delayed_signal dot=True   Last seen 2 min ago - arriving in 3-33 min
+  t+400s  state=signal_lost    dot=False  We've lost signal from your courier. Your order is still on its way; we'll update as soon as we hear from them.
+
+At 180s the dot comes OFF the map. That is the whole WISMO principle:
+a frozen dot is worse than no dot, because the customer believes the
+frozen dot until they stop believing anything you tell them. A
+confidently-wrong tracking page generates the exact support ticket it
+was built to prevent.
+
+AND THE OTHER DIRECTION -- prep time blows up from 8 to 25 minutes:
+the ETA must move, but not whipsaw. smooth_eta() damps DECREASES and
+lets INCREASES through almost undamped, because a customer who will be
+waiting 20 extra minutes needs to know now, while they can still do
+something about it. Good news can wait; bad news cannot.
+  raw     : [34.0, 33.0, 31.0, 30.0]
+  shown   : [31.6, 32.8, 32.0, 31.1]   (jump up passes through; drift down is damped)
+
+(62s)

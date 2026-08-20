@@ -1,0 +1,253 @@
+{
+  "scale_sweep": {
+    "grid_hash": {
+      "2000": 0.4942,
+      "10000": 0.8314,
+      "50000": 1.7236,
+      "200000": 6.6384
+    },
+    "linear_scan": {
+      "2000": 0.5723,
+      "10000": 2.1021,
+      "50000": 8.8906,
+      "200000": 65.5004
+    },
+    "scan/grid ratio": {
+      "2000": 1.1579,
+      "10000": 2.5286,
+      "50000": 5.1583,
+      "200000": 9.8669
+    }
+  },
+  "geo_benchmark": [
+    {
+      "updates_per_query": 5,
+      "index": "linear_scan",
+      "update_us": 4.9852,
+      "query_ms": 1.3873,
+      "query_qps": 720.8077,
+      "recall_vs_exact": 1.0
+    },
+    {
+      "updates_per_query": 5,
+      "index": "kdtree",
+      "update_us": 7.6827,
+      "query_ms": 0.7448,
+      "query_qps": 1342.6291,
+      "recall_vs_exact": 0.9872
+    },
+    {
+      "updates_per_query": 5,
+      "index": "grid_hash",
+      "update_us": 17.1403,
+      "query_ms": 0.5524,
+      "query_qps": 1810.4048,
+      "recall_vs_exact": 1.0
+    },
+    {
+      "updates_per_query": 5,
+      "index": "hex_h3",
+      "update_us": 39.9788,
+      "query_ms": 0.8591,
+      "query_qps": 1163.9912,
+      "recall_vs_exact": 1.0
+    },
+    {
+      "updates_per_query": 50,
+      "index": "linear_scan",
+      "update_us": 6.071,
+      "query_ms": 1.6199,
+      "query_qps": 617.3127,
+      "recall_vs_exact": 1.0
+    },
+    {
+      "updates_per_query": 50,
+      "index": "kdtree",
+      "update_us": 9.2474,
+      "query_ms": 0.7571,
+      "query_qps": 1320.7673,
+      "recall_vs_exact": 0.9839
+    },
+    {
+      "updates_per_query": 50,
+      "index": "grid_hash",
+      "update_us": 9.6833,
+      "query_ms": 0.8896,
+      "query_qps": 1124.1424,
+      "recall_vs_exact": 1.0
+    },
+    {
+      "updates_per_query": 50,
+      "index": "hex_h3",
+      "update_us": 41.7647,
+      "query_ms": 1.3354,
+      "query_qps": 748.8116,
+      "recall_vs_exact": 1.0
+    },
+    {
+      "updates_per_query": 200,
+      "index": "linear_scan",
+      "update_us": 5.0363,
+      "query_ms": 1.5421,
+      "query_qps": 648.4782,
+      "recall_vs_exact": 1.0
+    },
+    {
+      "updates_per_query": 200,
+      "index": "kdtree",
+      "update_us": 11.0208,
+      "query_ms": 0.7881,
+      "query_qps": 1268.8681,
+      "recall_vs_exact": 0.9872
+    },
+    {
+      "updates_per_query": 200,
+      "index": "grid_hash",
+      "update_us": 8.5983,
+      "query_ms": 0.6479,
+      "query_qps": 1543.4862,
+      "recall_vs_exact": 1.0
+    },
+    {
+      "updates_per_query": 200,
+      "index": "hex_h3",
+      "update_us": 38.9191,
+      "query_ms": 1.0616,
+      "query_qps": 941.9587,
+      "recall_vs_exact": 1.0
+    }
+  ],
+  "assignment": {
+    "orders": 500,
+    "offers": 3000,
+    "wins": 500,
+    "assigned": 500,
+    "races": 2490,
+    "violations": []
+  },
+  "batching": [
+    {
+      "window_s": 0,
+      "orders_in_batch": 1,
+      "greedy_mean_km": 0.1993,
+      "batched_mean_km": 0.1993,
+      "improvement_pct": 0.0,
+      "greedy_worst_km": 0.1993,
+      "batched_worst_km": 0.1993,
+      "first_offer_latency_s": 0.0
+    },
+    {
+      "window_s": 10,
+      "orders_in_batch": 12,
+      "greedy_mean_km": 0.2057,
+      "batched_mean_km": 0.2055,
+      "improvement_pct": 0.1012,
+      "greedy_worst_km": 0.4194,
+      "batched_worst_km": 0.4231,
+      "first_offer_latency_s": 5.0
+    },
+    {
+      "window_s": 20,
+      "orders_in_batch": 24,
+      "greedy_mean_km": 0.2046,
+      "batched_mean_km": 0.2042,
+      "improvement_pct": 0.1991,
+      "greedy_worst_km": 0.452,
+      "batched_worst_km": 0.4525,
+      "first_offer_latency_s": 10.0
+    },
+    {
+      "window_s": 30,
+      "orders_in_batch": 36,
+      "greedy_mean_km": 0.2035,
+      "batched_mean_km": 0.2021,
+      "improvement_pct": 0.6716,
+      "greedy_worst_km": 0.4695,
+      "batched_worst_km": 0.4679,
+      "first_offer_latency_s": 15.0
+    },
+    {
+      "window_s": 60,
+      "orders_in_batch": 72,
+      "greedy_mean_km": 0.207,
+      "batched_mean_km": 0.2042,
+      "improvement_pct": 1.3393,
+      "greedy_worst_km": 0.5204,
+      "batched_worst_km": 0.5108,
+      "first_offer_latency_s": 30.0
+    }
+  ],
+  "eta": {
+    "as_shipped": {
+      "n": 4000,
+      "mae": 10.055141156935129,
+      "bias": 3.0014995148416435,
+      "p90_abs": 21.41932252784092,
+      "coverage_80": 0.49425
+    },
+    "calibrated": {
+      "n": 2000,
+      "mae": 9.912382215147717,
+      "bias": 2.8860765177397907,
+      "p90_abs": 21.179510581775745,
+      "coverage_80": 0.894
+    },
+    "calibrated_sigma": 12.41408278659031,
+    "by_segment": {
+      "far": {
+        "n": 1473,
+        "mae": 10.441,
+        "bias": 2.969,
+        "p90_abs": 21.893,
+        "coverage_80": 0.86
+      },
+      "far_stale": {
+        "n": 340,
+        "mae": 10.057,
+        "bias": 3.491,
+        "p90_abs": 21.085,
+        "coverage_80": 0.991
+      },
+      "mid": {
+        "n": 118,
+        "mae": 5.468,
+        "bias": 0.707,
+        "p90_abs": 11.166,
+        "coverage_80": 0.975
+      },
+      "mid_stale": {
+        "n": 40,
+        "mae": 5.933,
+        "bias": 2.519,
+        "p90_abs": 11.391,
+        "coverage_80": 1.0
+      },
+      "near": {
+        "n": 23,
+        "mae": 4.925,
+        "bias": 0.803,
+        "p90_abs": 9.914,
+        "coverage_80": 1.0
+      },
+      "near_stale": {
+        "n": 6,
+        "mae": 5.077,
+        "bias": 1.542,
+        "p90_abs": 8.393,
+        "coverage_80": 1.0
+      }
+    }
+  },
+  "drills": {
+    "outage_queued": 120.0,
+    "outage_lost": 0,
+    "drain_seconds": 52,
+    "interval_width_before": 51.59953735342105,
+    "interval_width_after": 69.98643699569344,
+    "tracking_states": {
+      "live": 2547,
+      "delayed_signal": 326,
+      "signal_lost": 1127
+    }
+  }
+}
