@@ -95,8 +95,8 @@ available couriers in this metro the nearest one is already ~0.2 km away, so
 there is very little room for a smarter assignment. Batching pays when supply is
 *tight* and couriers are far apart — exactly the regime this fleet is not in. A
 benchmark run only in the easy regime would conclude batching is worthless; the
-correct conclusion is that its value is a function of utilisation, and **that
-sweep is the missing experiment**.
+correct conclusion is that its value is a function of utilisation — which the
+second pass sweeps and confirms below.
 
 On "product says couriers churn when offers are slow": that cost isn't in this
 table, which measures assignment quality and not retention. The exchange rate
