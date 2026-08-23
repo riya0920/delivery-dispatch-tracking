@@ -1,0 +1,108 @@
+{
+  "roadnet": {
+    "profile": {
+      "n": 400,
+      "mean": 1.3289677431117979,
+      "median": 1.350911186547759,
+      "p90": 1.4767388452553625,
+      "p99": 1.7175365075541658,
+      "max": 1.8999916507083587,
+      "mean_asymmetry": 0.07722812216851568
+    },
+    "by_hour": [
+      {
+        "hour": 3.0,
+        "seconds": 552.0063718794593,
+        "metres": 5720.0
+      },
+      {
+        "hour": 8.5,
+        "seconds": 974.1818181818178,
+        "metres": 5720.0
+      },
+      {
+        "hour": 12.0,
+        "seconds": 555.3219237216528,
+        "metres": 5720.0
+      },
+      {
+        "hour": 17.8,
+        "seconds": 974.1818181818178,
+        "metres": 5720.0
+      },
+      {
+        "hour": 22.0,
+        "seconds": 554.5924688736641,
+        "metres": 5720.0
+      }
+    ]
+  },
+  "eta": [
+    {
+      "model": "analytic (route+prep+queue)",
+      "mae": 3.202,
+      "bias": -1.3058,
+      "late_share": 0.49,
+      "mean_lateness_when_late": 4.5998,
+      "p90_abs_error": 7.3374
+    },
+    {
+      "model": "learned, mean",
+      "mae": 2.4446,
+      "bias": -0.2262,
+      "late_share": 0.478,
+      "mean_lateness_when_late": 2.7937,
+      "p90_abs_error": 5.2425
+    },
+    {
+      "model": "learned, P80",
+      "mae": 3.2098,
+      "bias": 1.8885,
+      "late_share": 0.2487,
+      "mean_lateness_when_late": 2.6567,
+      "p90_abs_error": 6.6928
+    }
+  ],
+  "surge": {
+    "naive": {
+      "reversals": 134,
+      "mean_abs_step": 0.04672612729122952,
+      "range": 0.3796707724520654
+    },
+    "controlled": {
+      "reversals": 65,
+      "mean_abs_step": 0.025434414371925965,
+      "range": 0.318015220957933
+    },
+    "max_multiplier": 1.318015220957933
+  },
+  "repositioning": [
+    {
+      "policy": "static (previous)",
+      "served": 7800.0,
+      "unserved": 10400.0,
+      "fill_rate": 0.4286,
+      "mean_herding": 0.0216,
+      "final_herding": 0.0216,
+      "mean_surge": 1.3492
+    },
+    {
+      "policy": "repositioning, 55% compliance",
+      "served": 11532.5,
+      "unserved": 6667.5,
+      "fill_rate": 0.6337,
+      "mean_herding": 0.1975,
+      "final_herding": 0.201,
+      "mean_surge": 1.836
+    },
+    {
+      "policy": "repositioning, 100% compliance",
+      "served": 11526.5,
+      "unserved": 6673.5,
+      "fill_rate": 0.6333,
+      "mean_herding": 0.2196,
+      "final_herding": 0.2227,
+      "mean_surge": 1.836
+    }
+  ]
+}

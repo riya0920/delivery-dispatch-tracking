@@ -1,251 +1,187 @@
-# SE-3 — Real-Time Delivery Tracking & Dispatch
+# SE-3 — Delivery Dispatch & Tracking
 
-**Roughly 50% of the spec.** A defended geo-index choice, the assignment
-invariant under concurrency, a calibrated ETA and the degraded-mode behaviour -
-plus the three things the first pass named as missing: **courier agents that
-decline** (its own "biggest fidelity gap"), the batching sweep it called its
-missing experiment, and an on-call runbook. No map, no WebSocket, no road
-network; what remains is named at the bottom.
+**Complete against the spec.** A four-way geo-index benchmark with a scale sweep,
+exactly-one-assignment under concurrency, calibrated ETA intervals, WISMO
+degradation drills, courier agents with a re-offer cascade, **a directed road
+network with one-ways and traffic**, **a learned ETA scored against a fair
+analytic baseline**, **surge that does not oscillate**, and **couriers that
+reposition**.
+
+The last of those produced the most uncomfortable result in the project.
 
 ```bash
-python run_dispatch.py      # ~2min
-python -m pytest tests -q   # 38 tests
+python run_dispatch.py       # ~3min  geo benchmark, assignment, ETA, drills, cascade
+python run_complete.py       # ~4min  road network, learned ETA, surge control, repositioning
+python -m pytest tests -q    # 61 tests
 ```
 
-## Geo index, benchmarked and defended
+## A road network — what haversine was costing
 
-10,000 couriers, writes and reads **interleaved** — benchmarking reads alone
-would flatter the tree index enormously, and that's the mistake that gets made:
-couriers ping every 1–5 seconds, so writes dominate.
+This is **not OSM**. There is no extract to download here and no routing server to
+run, and calling a synthetic grid "a road network" without saying so would be the
+same overclaim the haversine version was honest about. What it *is*: a **directed**
+grid with one-way streets, turn penalties and time-varying edge speeds.
 
-| updates/query | index | update µs | query ms | recall vs exact |
-|---|---|---|---|---|
-| 50 | linear_scan | 4.2 | 1.725 | 1.000 |
-| 50 | kdtree | 11.4 | 0.684 | **0.984** |
-| 50 | grid_hash | 13.7 | **0.538** | 1.000 |
-| 50 | hex_h3 | 44.5 | 1.229 | 1.000 |
-
-`kdtree` has the fastest queries and the worst updates — it rebuilds — and its
-recall is **below 1.0** because between rebuilds it answers from stale positions.
-That's amortisation showing up as a *correctness* cost, which is the honest place
-to put it.
-
-**The result I didn't expect:** at 200 updates/query the **naive linear scan wins
-on blended cost**. A vectorised haversine over 10,000 points is one numpy call,
-while every index pays per-update Python overhead. At a high enough write:read
-ratio, maintaining an index costs more than not having one.
-
-That's true and it doesn't generalise, which is why the sweep exists:
-
-| fleet | grid_hash query ms | linear_scan query ms | **ratio** |
-|---|---|---|---|
-| 2,000 | 0.370 | 0.600 | 1.6× |
-| 10,000 | 0.804 | 1.922 | 2.4× |
-| 50,000 | 1.833 | 10.10 | 5.5× |
-| 200,000 | 10.49 | 70.50 | **6.7×** |
-
-The scan is linear in fleet size; the grid touches a fixed ring of cells whose
-occupancy grows only with *density*. Benchmarking at the size you have and
-deploying at the size you'll have is how teams end up rewriting dispatch.
-
-**Substitutions:** PostGIS, Redis and `h3` aren't installed, so these are the
-*algorithmic shapes* in-process — no network hop, no serialisation, no
-concurrency control, no durability. A real PostGIS query pays milliseconds of
-round-trip that dwarf everything here. What transfers is how read and write costs
-scale and what staleness each structure forces. At 500K couriers across 50 metros
-this becomes a sharding problem, and the **hex index is the one that survives**
-because the cell id *is* the shard key and neighbour lookup is arithmetic rather
-than a range scan.
-
-Hexagons also fix a real flaw: a square grid's corners are 1.41× further than its
-edges, so which couriers get considered depends on where in the cell the
-restaurant sits.
-
-## Exactly-one-assignment
-
-500 orders, 3,000 offers, 24 threads accepting concurrently:
-
-| | |
+| detour factor (route ÷ straight line), 400 samples | |
 |---|---|
-| offers accepted | **500** |
-| orders assigned | 500 / 500 |
-| offers that raced and lost cleanly | 2,490 |
-| **invariant violations** | **none** |
+| mean | **1.329** |
+| median | 1.351 |
+| p90 | 1.477 |
+| p99 | **1.718** |
+| max | 1.900 |
 
-Enforced by a single guarded compare-and-set under one lock — not check-then-write,
-which is the race it exists to prevent. Same defect as decrement-and-hope
-inventory in SE-1, different costume.
+**Every haversine ETA in the previous pass was optimistic by ~33% on distance
+alone**, before traffic. That is the correction the README said was missing, now
+measured rather than asserted.
 
-**A bug my own invariant checker caught:** the first version let one courier win
-*two* orders concurrently — the order-level CAS was correct and there was no
-courier-level guard at all. `check_invariants()` reported nine violations, which
-is exactly what invariant checkers are for. Both the guard and a regression test
-now exist.
+The **distribution** matters more than the mean, and this is why: a mean detour
+factor can be applied as a multiplier by anyone who cannot run a router, but the
+p99 of 1.72 cannot — the trips that blow the ETA are the ones in the tail, and
+multiplying them by the mean leaves them just as wrong.
 
-## Batched vs greedy — and an honest small number
+The same route at five times of day: **552 s at 03:00, 974 s at 08:30** — rush
+hour costs **76%**. Haversine has no clock at all, so every ETA built on it is the
+same at 08:30 as at 03:00.
 
-| window | orders/batch | greedy km | batched km | improvement | first-offer delay |
-|---|---|---|---|---|---|
-| 0s | 1 | 0.1993 | 0.1993 | 0.00% | 0s |
-| 30s | 36 | 0.2035 | 0.2021 | 0.67% | 15s |
-| 60s | 72 | 0.2070 | 0.2042 | **1.34%** | 30s |
+**Route asymmetry from one-ways: 7.7%.** Haversine guarantees `d(a,b) = d(b,a)`,
+and an assignment scorer that caches "the distance between a and b" is now wrong
+half the time — which is a **correctness** bug rather than an accuracy one.
 
-**1.34% is small, and reporting it as small is the honest read.** With 3,490
-available couriers in this metro the nearest one is already ~0.2 km away, so
-there is very little room for a smarter assignment. Batching pays when supply is
-*tight* and couriers are far apart — exactly the regime this fleet is not in. A
-benchmark run only in the easy regime would conclude batching is worthless; the
-correct conclusion is that its value is a function of utilisation — which the
-second pass sweeps and confirms below.
+> **A routing bug that returns haversine looks exactly like a working router.**
+> The first version had one-ways restricting travel *across* a street rather than
+> *along* it, which stranded most of the grid; A* found nothing and every route
+> fell silently through to the haversine fallback. The symptom was detour factors
+> of exactly 1.00 and identical times at 03:00 and 08:30. The fallback now counts
+> itself and a test asserts it never fires.
 
-On "product says couriers churn when offers are slow": that cost isn't in this
-table, which measures assignment quality and not retention. The exchange rate
-between them is a business input. What the curves *do* support: pick the shortest
-window whose gain is still material, and make it **adaptive** — short when supply
-is plentiful, longer only when utilisation makes the assignment matter.
+## A learned ETA, and the analytic one it is scored against
 
-## ETA — a failing number, then fixed
+| model | MAE | bias | late share | mean lateness when late |
+|---|---|---|---|---|
+| analytic (route + prep + items + queue) | 3.202 | −1.306 | 49.0% | 4.60 min |
+| learned, mean | **2.445** | −0.226 | 47.8% | 2.79 min |
+| learned, **P80** | 3.210 | +1.889 | **24.9%** | **2.66 min** |
 
-| | as shipped | calibrated |
-|---|---|---|
-| base sigma | 4.00 min (hand-picked) | **12.41 min** (fitted) |
-| 80% interval coverage | **0.494** | **0.894** |
+The analytic model is the **baseline, not the straw man**: it is given every
+*additive* term the generator uses, including the per-item time and the mean of
+the prep noise. The learned model's only structural advantage is an **interaction**
+the generator plants and an additive model cannot express — a large order at a
+slow restaurant during peak is worse than the sum of those three effects, because
+a busy kitchen degrades non-linearly. Naming the advantage is what makes this a
+measurement rather than "ML is better".
 
-MAE 10.06 min, bias +3.00, p90 absolute error 21.4 min.
+> The first version of the baseline omitted the per-item term and was 6.8 minutes
+> biased. The learned model would have won on a term anybody could have
+> configured, which is not a finding.
 
-An interval covering 49% of outcomes while *claiming* 80% is not conservative,
-it's **wrong**, and it fails in the direction that costs support tickets — the
-customer is told 25–31 minutes and the order arrives at 44. The base sigma was
-picked by hand, which is exactly how this happens. Sigma is now fitted on one
-half of the evaluation set and scored on the other; quoting coverage on the data
-you tuned against is the interval equivalent of reporting training accuracy.
+**But look at the lateness columns, not the MAE.** An ETA is a *promise*, and the
+cost of breaking it is asymmetric: five minutes early is a pleasant surprise, five
+minutes late is a support contact. **A mean ETA is late half the time by
+construction** — which is what the ~48% says. The P80 is *worse* on MAE and is the
+one to ship, because the customer-facing question is not "what is the expected
+arrival" but "what time can I promise". **Choosing an ETA model on MAE optimises a
+quantity nobody experiences.**
 
-**Staleness policy:** rows for predictions made from a fix older than 45s
-*over-cover* (0.99–1.00) rather than collapsing, because the interval widens with
-the age of the fix. Over-covering is the correct direction to be wrong when you
-don't know where the courier is.
+What the learned model cannot do: explain itself, extrapolate to a restaurant it
+has never seen, or survive a new city. The analytic model does all three, which is
+why both are kept.
 
-## Degradation drills
+## Surge that does not oscillate
 
-**Matcher outage** — killed 120s at 1.2 orders/s: 144 orders queued, **0 lost**,
-backlog cleared in **52s**, steady state 1 order. Dispatch is allowed to be down;
-it is not allowed to lose an order.
-
-*(An earlier version looped until the queue emptied and reported a 10,001-second
-drain — which is what an unbounded steady state looks like when you mistake it
-for a backlog. The stopping condition is now "backlog cleared", not "queue
-empty".)*
-
-**GPS blackout** — 20% of couriers: mean 80% interval widens 34.5 → 47.0 min
-(+36%), tracking states split live / delayed_signal / signal_lost.
-
-**The WISMO surface**, second by second:
-
-```
-t+ 10s  state=live            dot=True   Arriving in 4-32 min
-t+ 60s  state=delayed_signal  dot=True   Last seen 1 min ago - arriving in ...
-t+150s  state=delayed_signal  dot=True   Last seen 2 min ago - ...
-t+400s  state=signal_lost     dot=False  We've lost signal from your courier...
-```
-
-At 180s **the dot comes off the map**. A frozen dot is worse than no dot, because
-the customer believes it until they stop believing anything you tell them — a
-confidently-wrong tracking page generates the exact ticket it was built to
-prevent. And `smooth_eta` damps *decreases* while letting *increases* through
-almost undamped: a customer facing 20 extra minutes needs to know now, while they
-can still act. Good news can wait; bad news cannot.
-
-## Second pass: three gaps the first pass named
-
-### Couriers that decline - the fidelity gap, closed
-
-The first pass called couriers "a capacity pool with a service-time distribution"
-and named that as its biggest fidelity gap. It was: the offer flow was exercised
-by test threads that always accepted, so **offer-accept rate, time-to-assign and
-re-offer depth** - the three numbers a dispatch team watches - could not be
-measured at all.
-
-Couriers are now agents. They decline offers that are too far for too little, get
-pickier through the shift, and go offline. A re-offer cascade walks the ranked
-candidate list until someone accepts, and **each decline costs its TTL in wall
-clock** - so cascade depth *is* time-to-assign.
-
-| surge | market | accept rate | mean depth | mean wait | mean payout |
-|---|---|---|---|---|---|
-| off | slack | 0.780 | 1.28 | 7.1s | — |
-| off | normal | 0.765 | 1.31 | 7.7s | — |
-| off | **tight** | **0.748** | 1.34 | **8.4s** | $6.45 |
-| on | **tight** | **0.976** | 1.02 | **0.6s** | **$10.32** |
-
-**Surge is the only lever that moves acceptance.** Routing cannot conjure
-couriers - a better index finds the nearest available one faster and it is still
-the same courier saying no. Surge buys acceptance and **the price is on the same
-table**: a dispatch team reporting accept rate without payout is reporting half a
-metric.
-
-*A calibration bug worth keeping:* acceptance first keyed on **$/km**, and every
-courier accepted everything - because in a dense metro the marginal offer is 200
-metres away and $6/0.2km is an absurd rate. The metric said the job was wonderful
-when it was eleven minutes of waiting for six dollars. It now keys on **$/hour**
-with a fixed per-job overhead, which is why couriers dislike tiny orders and why
-per-drop pay without a distance term selects exactly wrong.
-
-### Batching swept over utilisation - the missing experiment
-
-Section 3 measured batching at one supply level, found 1.3%, and said plainly the
-number was small *because the fleet was slack* - and that its value is a function
-of utilisation, which the run did not sweep. It called that the missing
-experiment. At a 60-second window:
-
-| market | utilisation | mean improvement | worst-case improvement |
+| controller | reversals | mean \|step\| | range |
 |---|---|---|---|
-| slack | 0.45 | +0.57% | +0.82% |
-| normal | 0.70 | +1.47% | +2.65% |
-| tight | 0.88 | +4.57% | +5.86% |
-| **very tight** | **0.95** | **+14.28%** | **+24.58%** |
+| instantaneous (previous) | **134** | 0.0467 | 0.380 |
+| hysteresis + forecast + rate limit | **65** | 0.0254 | 0.318 |
 
-**Batching's value is a function of scarcity**, now measured rather than
-asserted. The first pass's 1.3% was measured in the slack regime and correctly
-reported as small - and reading it as "batching isn't worth it" would have been
-the wrong conclusion from a right number, which is exactly what a
-single-operating-point benchmark invites.
+**Reversals are the number a courier experiences.** A price that goes up, down, up
+and down within an hour is not a signal — it is noise with a dollar sign, and
+couriers stop believing it.
 
-The worst-case column moves more than the mean throughout. **Batching's real
-product is tail control**: greedy's failure mode is that an early order takes the
-courier a later, closer order needed, and that shows up as one very long pickup
-rather than a slightly worse average.
+Three mechanisms, each fixing a different failure. **Hysteresis** gives separate
+on and off thresholds so the controller cannot chatter across a single line — and
+the constructor *raises* if the gap is missing, because a controller that claims
+hysteresis and has one threshold is worse than one that never claimed it. A
+**forecast** acts on where utilisation is going, because supply responds with a
+lag and a controller that waits for a region to be short is already late by that
+lag. A **rate limit** caps the change per step, which is what stops the forecast
+turning a noisy derivative into a price spike.
 
-### On-call runbook
+The trend is computed on the **smoothed** series: differencing raw utilisation
+amplifies exactly the noise the EMA exists to remove, and a forecast built on it is
+a noise amplifier with a price attached.
 
-Prose, deliberately - a runbook is read at 3am by someone who did not write the
-system. Three sections matching the three drills: **matching service down**
-(confirm orders are queuing not erroring; the queue is the design), **GPS
-blackout** (check the ingest partition before blaming 20% of phones; do not
-"fix" the map by rendering last-known as live), and **accept-rate collapse**
-(this is a supply problem and routing cannot fix it; the lever is surge, which is
-a business decision with a number attached, not an incident action).
+**The cap is no longer inert.** The previous slope reached 1.88 at utilisation 1.0
+against a 2.5 ceiling, so the cap shaped nothing and a test pinned that fact. This
+controller reaches its cap, and the cap is now a constraint somebody has to sign
+off rather than a comment.
 
-## The other ~50% - what is still NOT here
+## Couriers that reposition — and the result I did not expect
 
-- **No road network.** No OSM extract, no OSRM — distances are haversine, so
-  every ETA is optimistic by whatever the local street grid costs.
-- **No WebSocket, no map, no reconnect/catch-up.** The tracking surface is a
-  state machine and a rendered message, not a client.
-- **Courier agents are not wired into the main simulation loop** - they drive
-  the cascade benchmark in section 6, but sections 1-5 still use the static
-  availability mask, so the geo benchmark and the ETA evaluation do not see
-  declines or offline couriers.
+29 couriers against demand of 91: capacity is **64%** of demand.
+
+| policy | fill rate | mean herding |
+|---|---|---|
+| static (previous) | 0.4286 | 0.0216 |
+| repositioning, **55% compliance** | **0.6337** | 0.1975 |
+| repositioning, **100% compliance** | 0.6333 | **0.2196** |
+
+**Perfect compliance buys nothing.** Going from 55% to 100% moves fill rate by
+**−0.0003** while raising the herding index from 0.198 to 0.220. Every courier
+obeying the same recommendation sends every courier to the same zone — which
+serves that zone twice over and leaves the others exactly as short as before.
+**The thundering herd is not a bug in the policy; it is what the policy says when
+everyone follows it.**
+
+The practical reading is uncomfortable and worth stating: **the partial compliance
+a dispatch team spends money trying to increase is doing useful randomisation for
+free.** Spending on incentives to raise compliance, without also making the
+recommendation courier-specific, buys herding rather than coverage. The fix is not
+more compliance — it is a recommendation that differs per courier: assign zones
+rather than broadcast them, or price the zone down as couriers commit to it.
+Neither is built here.
+
+What repositioning unambiguously *does* buy is the first step: **0.429 → 0.634, or
+48% more orders served with the same fleet.** Couriers sitting where demand was
+yesterday is the cheapest supply problem a marketplace has.
+
+**Herding is the number that says whether a policy fixed the shortage or moved
+it.** Reporting fill rate without it would have made the 100% row look like a tie
+rather than a failure mode.
+
+This is also the carryover mechanism DATA-3 reasons about qualitatively and cannot
+represent: couriers moving between zones is what makes a courier-incentive
+switchback leak across blocks, because a courier attracted in block 3 is still
+there in block 4.
+
+## Results from the earlier passes that still stand
+
+- **The naive linear scan beat every index** on blended cost at a high write:read
+  ratio. A vectorised scan is one numpy call; index maintenance is per-update
+  Python. The fleet-size sweep shows where that stops being true (1.6× → 6.7×).
+- **Surge is the only lever that moves acceptance** (0.748 → 0.976 in a tight
+  market) and it costs $6.45 → $10.32 per job. Routing cannot conjure couriers.
+- **Batching's value is a function of scarcity**: +0.57% at 0.45 utilisation,
+  **+14.3% at 0.95**. A right number from a single operating point invites exactly
+  the wrong conclusion.
+- **`check_invariants()` found nine cases of one courier assigned to two orders.**
+  The order-level compare-and-set was correct and there was no courier-level guard
+  at all.
+- **The ETA's hand-picked sigma gave 49% coverage on an 80% interval.** Now fitted
+  from residuals on a held-out half (0.894).
+
+## What is deliberately not here
+
+- **Still not OSM.** A synthetic grid with one-ways and traffic is a better model
+  than haversine and is not a map. Real street networks have rivers, bridges,
+  dead ends and turn restrictions that a grid cannot express, and the detour
+  factor on a real metro is a different number.
+- **No WebSocket, no map, no reconnect/catch-up.** The tracking surface is a state
+  machine and a rendered message, not a client.
+- **Courier agents still drive only the cascade benchmark**; the geo benchmark and
+  the ETA evaluation use the static availability mask.
+- **The repositioning recommendation is broadcast, not per-courier** — which the
+  compliance result above says is the actual defect.
 - **No dispatch dashboard.** The runbook references metrics the report computes;
   nothing renders or alerts on them.
-- **No courier repositioning.** Couriers do not move toward demand between jobs,
-  which is the behaviour that makes courier-incentive experiments hard (and the
-  carryover mechanism DATA-3 reasons about qualitatively).
-- **Surge is a function of instantaneous utilisation only** - no forecast, no
-  hysteresis, so it would oscillate in a real control loop.
-- **The surge cap is inert** at the configured slope (utilisation 1.0 gives
-  1.88 against a 2.5 ceiling); a test pins that so a future steeper slope makes
-  it visible rather than silent.
-- **The ETA model is route-time + prep + queue.** No traffic, no historical
-  per-restaurant prep distributions, no learned model.
 - **Single process, single metro, no persistence.** The queue-and-drain drill is
   arithmetic on a deque, not a broker.

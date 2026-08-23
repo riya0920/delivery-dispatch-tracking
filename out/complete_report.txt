@@ -1,0 +1,160 @@
+==============================================================================
+SE-3 COMPLETION PASS
+==============================================================================
+
+==============================================================================
+A. A ROAD NETWORK -- WHAT HAVERSINE WAS COSTING
+==============================================================================
+Not OSM. There is no extract to download here and no routing server to
+run, and calling a synthetic grid 'a road network' without saying so
+would be the same overclaim the haversine version was honest about.
+What it is: a DIRECTED grid with one-way streets, turn penalties and
+time-varying edge speeds.
+
+  Detour factor -- route distance / straight-line distance, 400 samples:
+    mean 1.329   median 1.351   p90 1.477   p99 1.718   max 1.900
+
+  EVERY HAVERSINE ETA IN THE PREVIOUS PASS WAS OPTIMISTIC BY ~33% ON
+  DISTANCE ALONE, before traffic. That is the correction the README
+  said was missing, now measured rather than asserted.
+
+  The DISTRIBUTION matters more than the mean, and this is why: a mean
+  detour factor can be applied as a multiplier, but the p99 of 1.72
+  cannot -- the trips that blow the ETA are the ones in the tail, and
+  multiplying them by the mean leaves them just as wrong.
+
+  The same route at five times of day:
+      hour    seconds     metres
+       3.0      552.0     5720.0
+       8.5      974.2     5720.0
+      12.0      555.3     5720.0
+      17.8      974.2     5720.0
+      22.0      554.6     5720.0
+
+  Rush hour costs 76% (974s vs 552s). Haversine has no clock at
+  all, so every ETA built on it is the same at 08:30 as at 03:00.
+
+  ROUTE ASYMMETRY from one-ways: 7.7% mean difference between a->b
+  and b->a. Haversine guarantees symmetry, and an assignment scorer
+  that caches 'the distance between a and b' is now wrong half the
+  time -- which is a correctness bug rather than an accuracy one.
+
+==============================================================================
+B. A LEARNED ETA, AND THE ANALYTIC ONE IT IS SCORED AGAINST
+==============================================================================
+                      model        mae       bias  late_share  mean_lateness_when_late  p90_abs_error
+analytic (route+prep+queue)      3.202     -1.306       0.490                    4.600          7.337
+              learned, mean      2.445     -0.226       0.478                    2.794          5.243
+               learned, P80      3.210      1.889       0.249                    2.657          6.693
+
+  The analytic model is the BASELINE, not the straw man. It is
+  interpretable, needs no training data, degrades gracefully, and is
+  given the CORRECT mean prep time per restaurant rather than a global
+  constant -- so the comparison is fair.
+
+  Learned minus analytic on MAE: -0.757 minutes.
+
+  The learned model's only structural advantage is an INTERACTION the
+  generator plants and an additive model cannot express: a large order
+  at a slow restaurant during peak is worse than the sum of those three
+  effects, because a busy kitchen degrades non-linearly. Naming the
+  advantage is what makes this a measurement rather than 'ML is better'.
+
+  BUT LOOK AT THE LATENESS COLUMNS, NOT THE MAE. An ETA is a PROMISE,
+  and the cost of breaking it is asymmetric -- five minutes early is a
+  pleasant surprise, five minutes late is a support contact.
+
+    analytic     : late 49.0% of the time, by 4.6 min when late
+    learned mean : late 47.8% of the time, by 2.8 min when late
+    learned P80  : late 24.9% of the time, by 2.7 min when late
+
+  A MEAN ETA IS WRONG HALF THE TIME BY CONSTRUCTION, which is what the
+  ~50%% lateness on both mean models says. The P80 is worse on MAE and
+  is the one to ship, because the customer-facing question is not 'what
+  is the expected arrival' but 'what time can I promise'. Choosing an
+  ETA model on MAE optimises a quantity nobody experiences.
+
+  WHAT THE LEARNED MODEL CANNOT DO: explain itself, extrapolate to a
+  restaurant it has never seen, or survive a new city. The analytic
+  model does all three, which is why both are kept.
+
+==============================================================================
+C. SURGE THAT DOES NOT OSCILLATE
+==============================================================================
+  Utilisation wanders across the threshold for 300 steps.
+
+  controller                      reversals      mean |step|      range
+  instantaneous (previous)              134           0.0467      0.380
+  hysteresis + forecast                  65           0.0254      0.318
+
+  REVERSALS ARE THE NUMBER A COURIER EXPERIENCES. A price that goes up,
+  down, up and down within an hour is not a signal -- it is noise with
+  a dollar sign, and couriers stop believing it. The instantaneous
+  controller reverses 134 times; the damped one 65.
+
+  Three mechanisms, each fixing a different failure. HYSTERESIS gives
+  separate on and off thresholds, so the controller cannot chatter
+  across a single line. A FORECAST acts on where utilisation is going,
+  because supply responds with a lag and a controller that waits for a
+  region to be short is already late by that lag. A RATE LIMIT caps the
+  change per step, which is what stops the forecast turning a noisy
+  derivative into a price spike.
+
+  The trend is computed on the SMOOTHED series. Differencing raw
+  utilisation amplifies exactly the noise the EMA exists to remove, and
+  a forecast built on it is a noise amplifier with a price attached.
+
+  THE CAP IS NO LONGER INERT. The previous slope reached 1.88 at
+  utilisation 1.0 against a 2.5 ceiling, so the cap shaped nothing and a
+  test pinned that fact. This controller reaches 1.32, and the cap is
+  now a constraint somebody has to sign off rather than a comment.
+
+==============================================================================
+D. COURIERS THAT REPOSITION
+==============================================================================
+                        policy       served     unserved    fill_rate  mean_herding  final_herding   mean_surge
+             static (previous)    7800.0000   10400.0000       0.4286        0.0216         0.0216       1.3493
+ repositioning, 55% compliance   11532.5000    6667.5000       0.6337        0.1975         0.2010       1.8360
+repositioning, 100% compliance   11526.5000    6673.5000       0.6333        0.2196         0.2227       1.8360
+
+  29 couriers against demand of 91 -- capacity is 64% of demand.
+
+  Repositioning lifts fill rate from 0.4286 to 0.6337 at realistic
+  compliance, and to 0.6333 if every courier did as they were told.
+
+  PERFECT COMPLIANCE BUYS NOTHING. That is the result, and it is not the one
+  I expected to write.
+
+  Going from 55% to 100% compliance moves fill rate by -0.0003 while
+  raising the herding index from 0.1975 to 0.2196. Every courier obeying
+  the same recommendation sends every courier to the same zone --
+  which serves that zone twice over and leaves the others exactly as
+  short as before. THE THUNDERING HERD IS NOT A BUG IN THE POLICY,
+  IT IS WHAT THE POLICY SAYS when everyone follows it.
+
+  The practical reading is uncomfortable and worth stating: the
+  PARTIAL compliance a dispatch team spends money trying to increase
+  is doing useful randomisation for free. Spending on incentives to
+  raise compliance, without also making the recommendation
+  courier-specific, buys herding rather than coverage.
+
+  The fix is not more compliance, it is a recommendation that
+  differs per courier -- assign zones rather than broadcast them, or
+  price the zone down as couriers commit to it. Neither is built
+  here, and both are what a real repositioning system does.
+
+  What repositioning unambiguously DOES buy is the first step: 0.4286 to
+  0.6337, which is 48% more orders served with the same fleet. Couriers
+  sitting where demand was yesterday is the cheapest supply problem a
+  marketplace has.
+
+  HERDING is the number that says whether a policy fixed the shortage or
+  moved it: 0.0216 static, 0.1975 at 55%, 0.2196 at 100%. Reporting fill rate
+  without it would have made the 100%% row look like a tie rather than a
+  failure mode.
+
+  This is also the carryover mechanism DATA-3 reasons about
+  qualitatively and cannot represent: couriers moving between zones is
+  what makes a courier-incentive switchback leak across blocks, because
+  a courier attracted in block 3 is still there in block 4.
+
