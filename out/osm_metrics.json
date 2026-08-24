@@ -1,0 +1,98 @@
+{
+  "detour": [
+    {
+      "network": "wilmington",
+      "from_m": 500,
+      "n": 21,
+      "median": 1.7488,
+      "p90": 3.0302,
+      "max": 3.6738
+    },
+    {
+      "network": "wilmington",
+      "from_m": 1000,
+      "n": 61,
+      "median": 1.4588,
+      "p90": 2.8143,
+      "max": 3.489
+    },
+    {
+      "network": "wilmington",
+      "from_m": 2000,
+      "n": 84,
+      "median": 1.4385,
+      "p90": 1.8706,
+      "max": 3.5731
+    },
+    {
+      "network": "wilmington",
+      "from_m": 3000,
+      "n": 86,
+      "median": 1.3671,
+      "p90": 1.7275,
+      "max": 2.9346
+    },
+    {
+      "network": "wilmington",
+      "from_m": 4000,
+      "n": 123,
+      "median": 1.3357,
+      "p90": 1.613,
+      "max": 1.8818
+    },
+    {
+      "network": "wilmington",
+      "from_m": 6000,
+      "n": 40,
+      "median": 1.3243,
+      "p90": 1.5318,
+      "max": 1.7334
+    },
+    {
+      "network": "synthetic grid",
+      "from_m": 500,
+      "n": 37,
+      "median": 1.3014,
+      "p90": 1.5238,
+      "max": 1.6521
+    },
+    {
+      "network": "synthetic grid",
+      "from_m": 1000,
+      "n": 129,
+      "median": 1.3459,
+      "p90": 1.5264,
+      "max": 1.7803
+    },
+    {
+      "network": "synthetic grid",
+      "from_m": 2000,
+      "n": 137,
+      "median": 1.3585,
+      "p90": 1.4823,
+      "max": 1.5789
+    },
+    {
+      "network": "synthetic grid",
+      "from_m": 3000,
+      "n": 88,
+      "median": 1.3396,
+      "p90": 1.443,
+      "max": 1.5267
+    },
+    {
+      "network": "synthetic grid",
+      "from_m": 4000,
+      "n": 29,
+      "median": 1.3869,
+      "p90": 1.4471,
+      "max": 1.4648
+    }
+  ],
+  "asymmetry": {
+    "pairs": 120,
+    "share_differing": 0.85,
+    "mean_gap": 0.07518143172968138,
+    "p90_gap": 0.16486001989547017
+  }
+}

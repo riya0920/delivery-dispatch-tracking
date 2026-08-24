@@ -1,0 +1,95 @@
+==============================================================================
+SE-3 OSM PASS -- THE GRID, CHECKED AGAINST A REAL CITY
+==============================================================================
+Wilmington, Delaware, via the Overpass API.
+
+  road ways            : 3136
+  one-way ways         : 1588 (50.6%)
+  nodes                : 16501
+  largest SCC          : 15346 (93.0%) -- routing is restricted to it
+
+  The bounding box cuts ways at its edge, leaving stubs a courier can
+  enter and not leave: 11.7%% of random pairs were unreachable before
+  the component restriction and almost none of that is Wilmington, it
+  is the box. STRONGLY connected, not weakly -- with one-ways,
+  'connected if you ignore direction' is not the question a courier
+  asks.
+
+  pyosmium installs and then fails to import: its compiled extension
+  is blocked by this machine's Application Control policy. That is a
+  real block, unlike the Postgres one. Overpass JSON needs no compiled
+  parser, so the data comes that way instead.
+
+==============================================================================
+A. DETOUR FACTOR: THE GRID'S SINGLE NUMBER VS A REAL CITY'S CURVE
+==============================================================================
+       network  from_m   n   median      p90      max
+    wilmington     500  21     1.75     3.03     3.67
+    wilmington    1000  61     1.46     2.81     3.49
+    wilmington    2000  84     1.44     1.87     3.57
+    wilmington    3000  86     1.37     1.73     2.93
+    wilmington    4000 123     1.34     1.61     1.88
+    wilmington    6000  40     1.32     1.53     1.73
+synthetic grid     500  37     1.30     1.52     1.65
+synthetic grid    1000 129     1.35     1.53     1.78
+synthetic grid    2000 137     1.36     1.48     1.58
+synthetic grid    3000  88     1.34     1.44     1.53
+synthetic grid    4000  29     1.39     1.45     1.46
+
+  THE GRID HAS NO DISTANCE DEPENDENCE AND THE REAL CITY DOES.
+
+    wilmington : median 1.75 on the shortest trips -> 1.32 on the
+                 longest, a 24% fall
+    grid       : median 1.30 -> 1.39, flat
+
+  That is not a small correction and it points the wrong way for this
+  project. A barrier or a one-way pair costs a fixed number of metres,
+  and a fixed number of metres is a bigger fraction of a short trip.
+  DELIVERIES ARE SHORT TRIPS.
+
+  On the shortest bucket the grid says 1.30 and the city says 1.75 --
+  it understates the detour by 34% exactly where the business lives.
+  The p90 there is 1.52 against 3.03, which is close to double.
+
+  A SINGLE MEAN DETOUR MULTIPLIER IS THE WRONG SHAPE OF CORRECTION.
+  The previous pass already said the mean could not be applied to the
+  tail; this says it cannot be applied across trip lengths either.
+
+==============================================================================
+B. ONE-WAY ASYMMETRY: 7.7% ON THE GRID, AND ON A REAL CITY?
+==============================================================================
+  pairs where A->B differs from B->A : 85.0%
+  mean gap when they differ          : 7.5%
+  p90 gap                            : 16.5%
+
+  The synthetic grid measured 7.7%% of routes asymmetric. Wilmington
+  is 85%, which is 11x more, on a street network where half the
+  ways are one-way (50.6%).
+
+  THE PREVIOUS PASS CALLED THIS A CORRECTNESS BUG AND UNDERSTATED HOW
+  OFTEN IT FIRES. An assignment scorer that caches 'the distance
+  between a and b' is wrong on 7.7%% of pairs in the grid's world and
+  on 85% of them here. That is not an edge case, it is the common
+  case, and the direction of travel has to be part of the key.
+
+==============================================================================
+WHAT THIS IS NOT
+==============================================================================
+  ONE CITY, and a mid-sized American one with a river through it. The
+  numbers above are Wilmington's, not 'a real metro's' -- Manhattan's
+  grid and London's medieval core would both disagree, in opposite
+  directions. What transfers is the SHAPE of the error, not its size.
+
+  NO TRAFFIC. OSM does not know what time it is. The time-of-day
+  multipliers in the ETA work remain this project's own assumption,
+  so the rush-hour results are not validated by anything here -- only
+  the geometry is.
+
+  NO TURN RESTRICTIONS. `type=restriction` relations are not parsed,
+  so every junction here permits every turn. That makes these detour
+  factors a LOWER BOUND on the real ones.
+
+  NOT A ROUTING SERVICE. A* over 15k nodes in-process, no contraction
+  hierarchies, no live traffic feed, and the ETA models were not
+  refitted on this network.
+

@@ -13,7 +13,7 @@ The last of those overturned this project's own previous conclusion.
 ```bash
 python run_dispatch.py       # ~3min  geo benchmark, assignment, ETA, drills, cascade
 python run_complete.py       # ~4min  road network, learned ETA, surge control, repositioning
-python -m pytest tests -q    # 73 tests
+python -m pytest tests -q    # 83 tests
 ```
 
 ## A road network — what haversine was costing
@@ -225,12 +225,90 @@ there in block 4.
 - **The ETA's hand-picked sigma gave 49% coverage on an 80% interval.** Now fitted
   from residuals on a held-out half (0.894).
 
+## A real city — the grid, checked against Wilmington
+
+Every pass carried this: *"Still not OSM. [...] the detour factor on a real metro
+is a different number."* That last clause is a prediction, and it is now tested
+against **real OpenStreetMap geometry** for Wilmington, Delaware — 3,136 road
+ways, **50.6% of them one-way**, 16,501 nodes, fetched from the Overpass API.
+
+```bash
+python run_osm.py
+```
+
+> `pyosmium` installs and then fails to import: its compiled extension is blocked
+> by this machine's Application Control policy. That one is a real block, unlike
+> the Postgres claim. Overpass JSON needs no compiled parser, so the data comes
+> that way — a bounding box, not a planet extract, which is the smaller and
+> honest claim.
+
+> Routing is restricted to the **largest strongly-connected component** (93% of
+> nodes). A bounding box cuts ways at its edge, leaving stubs a courier can enter
+> and not leave: **11.7% of random pairs were unreachable** before this, and
+> almost none of that is Wilmington — it's the box. *Strongly* connected, not
+> weakly: with one-ways, "connected if you ignore direction" is not the question
+> a courier asks.
+
+### The grid has no distance dependence and the real city does
+
+| straight-line distance | Wilmington median | grid median | Wilmington p90 | grid p90 |
+|---|---|---|---|---|
+| **≥ 500 m** | **1.75** | 1.30 | **3.03** | 1.52 |
+| ≥ 1,000 m | 1.46 | 1.35 | 2.81 | 1.53 |
+| ≥ 2,000 m | 1.44 | 1.36 | 1.87 | 1.48 |
+| ≥ 3,000 m | 1.37 | 1.34 | 1.73 | 1.44 |
+| ≥ 4,000 m | 1.34 | 1.39 | 1.61 | 1.45 |
+| ≥ 6,000 m | 1.32 | — | 1.53 | — |
+
+**The real detour factor falls 24% with trip length. The grid's is flat.**
+
+A barrier or a one-way pair costs a fixed number of metres, and a fixed number of
+metres is a bigger fraction of a short trip. **Deliveries are short trips.**
+
+On the shortest bucket the grid says 1.30 and the city says **1.75** — the grid
+**understates the detour by 34% exactly where the business lives**, and its p90
+there (1.52) is close to *half* the real one (3.03).
+
+**So a single mean detour multiplier is the wrong shape of correction.** The
+previous pass established that the mean could not be applied to the tail; this
+establishes it cannot be applied across trip lengths either. The grid's headline
+1.329 is a decent average of a curve it does not have.
+
+### One-way asymmetry: 7.7% on the grid, 85% in Wilmington
+
+| | grid | Wilmington |
+|---|---|---|
+| routes where A→B ≠ B→A | 7.7% | **85.0%** |
+| mean gap when they differ | — | 7.5% |
+| p90 gap | — | 16.5% |
+
+The previous pass called caching "the distance between a and b" a **correctness**
+bug and then understated how often it fires by **11×**. At 7.7% it reads as an
+edge case. At 85% it is the common case, and direction of travel has to be part
+of the cache key.
+
+### What this is not
+
+- **One city**, and a mid-sized American one with a river through it. Manhattan's
+  grid and London's medieval core would disagree in opposite directions. **What
+  transfers is the shape of the error, not its size.**
+- **No traffic.** OSM does not know what time it is, so the time-of-day
+  multipliers remain this project's own assumption and the rush-hour results are
+  not validated by anything here. Only the geometry is.
+- **No turn restrictions.** `type=restriction` relations are not parsed, so every
+  junction permits every turn — which makes these detour factors a **lower
+  bound**.
+- **Not a routing service.** A* over 15k nodes in-process, no contraction
+  hierarchies, no live traffic, and the ETA models were not refitted on it.
+
 ## What is deliberately not here
 
-- **Still not OSM.** A synthetic grid with one-ways and traffic is a better model
-  than haversine and is not a map. Real street networks have rivers, bridges,
-  dead ends and turn restrictions that a grid cannot express, and the detour
-  factor on a real metro is a different number.
+- **The OSM network is measured, not used.** The ETA models, the assignment
+  benchmark and the repositioning work all still run on the synthetic grid; the
+  real network is only compared against it. Refitting them on Wilmington is the
+  obvious next step and the detour table above says roughly what it would cost.
+- **No turn restrictions and no traffic** on the real network, so its detour
+  factors are a lower bound and its rush-hour behaviour is unmodelled.
 - **No WebSocket, no map, no reconnect/catch-up.** The tracking surface is a state
   machine and a rendered message, not a client.
 - **Courier agents still drive only the cascade benchmark**; the geo benchmark and
