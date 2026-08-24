@@ -104,5 +104,54 @@
       "final_herding": 0.2227,
       "mean_surge": 1.836
     }
-  ]
+  ],
+  "targeted_repositioning": {
+    "ceiling": 0.6373626373626373,
+    "sweep": [
+      {
+        "capacity": 0.65,
+        "couriers": 29,
+        "oracle": 0.6374,
+        "broadcast": 0.6359,
+        "broadcast_herd": 0.2397,
+        "targeted": 0.6358,
+        "targeted_herd": 0.2131,
+        "headroom": 0.0014,
+        "gap_closed": NaN
+      },
+      {
+        "capacity": 0.9,
+        "couriers": 40,
+        "oracle": 0.8791,
+        "broadcast": 0.8738,
+        "broadcast_herd": 0.198,
+        "targeted": 0.8769,
+        "targeted_herd": 0.1988,
+        "headroom": 0.0053,
+        "gap_closed": 0.5825
+      },
+      {
+        "capacity": 1.2,
+        "couriers": 54,
+        "oracle": 1.0,
+        "broadcast": 0.9469,
+        "broadcast_herd": 0.146,
+        "targeted": 0.9984,
+        "targeted_herd": 0.0982,
+        "headroom": 0.0531,
+        "gap_closed": 0.969
+      },
+      {
+        "capacity": 1.6,
+        "couriers": 72,
+        "oracle": 1.0,
+        "broadcast": 0.9748,
+        "broadcast_herd": 0.1229,
+        "targeted": 0.999,
+        "targeted_herd": 0.0426,
+        "headroom": 0.0252,
+        "gap_closed": 0.9608
+      }
+    ]
+  }
 }

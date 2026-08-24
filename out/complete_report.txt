@@ -150,11 +150,72 @@ repositioning, 100% compliance   11526.5000    6673.5000       0.6333        0.2
 
   HERDING is the number that says whether a policy fixed the shortage or
   moved it: 0.0216 static, 0.1975 at 55%, 0.2196 at 100%. Reporting fill rate
-  without it would have made the 100%% row look like a tie rather than a
+  without it would have made the 100% row look like a tie rather than a
   failure mode.
 
   This is also the carryover mechanism DATA-3 reasons about
   qualitatively and cannot represent: couriers moving between zones is
   what makes a courier-incentive switchback leak across blocks, because
   a courier attracted in block 3 is still there in block 4.
+
+==============================================================================
+E. PER-COURIER RECOMMENDATIONS -- THE FIX THE LAST SECTION ASKED FOR
+==============================================================================
+The section above ended by saying the defect was the BROADCAST: a zone
+that is three couriers short should be offered to three couriers, not
+to the fleet. That is now built -- an assignment with per-zone capacity
+caps instead of an argmax everybody can compute for themselves.
+
+  capacity  couriers     oracle  broadcast  broadcast_herd   targeted  targeted_herd   headroom  gap_closed
+    0.6500        29     0.6374     0.6359          0.2397     0.6358         0.2131     0.0014         n/a
+    0.9000        40     0.8791     0.8738          0.1980     0.8769         0.1988     0.0053      0.5825
+    1.2000        54     1.0000     0.9469          0.1460     0.9984         0.0982     0.0531      0.9690
+    1.6000        72     1.0000     0.9748          0.1229     0.9990         0.0426     0.0252      0.9608
+
+CHECK THE CEILING BEFORE READING THE FIRST ROW.
+
+  Best fill ANY placement of 29 couriers could reach : 0.6374
+  Broadcast, 100% compliance                        : 0.6359
+  Targeted, 100% compliance                         : 0.6358
+
+  THE BROADCAST POLICY WAS ALREADY AT THE CEILING -- 0.0014 of headroom
+  on a 0.6374 maximum. There was no fill rate left for a smarter policy
+  to win, so `gap_closed` is not reported for that row: a ratio whose
+  denominator is noise is noise with a percent sign.
+
+  WHICH MEANS THE HERDING MEASURED IN SECTION D WAS NOT A PATHOLOGY.
+  IT WAS THE OPTIMUM. With demand this concentrated and capacity at
+  64% of it, every courier belongs in one of the three busy zones and
+  a policy that spread them out would serve FEWER orders. Targeting
+  still lowers herding here (0.2131 against 0.2397) and buys nothing for it.
+
+  Without the ceiling, 'the smarter policy did not help' and 'there was
+  nothing left to win' look identical in the fill-rate column, and they
+  call for opposite decisions.
+
+SO THE QUESTION IS NOT WHETHER TARGETING HELPS. IT IS WHERE.
+
+  At 120% capacity the broadcast gives up 0.0531 and targeting recovers
+  97% of it, at 33% less herding.
+
+  WHETHER THE PER-COURIER RECOMMENDATION IS WORTH BUILDING IS A
+  PROPERTY OF HOW SHORT THE MARKET IS. In a market short enough that
+  every courier belongs in a busy zone, a broadcast IS the assignment
+  and the capacity caps never bind. Once supply can cover demand the
+  broadcast overshoots: everybody chases the same zone, that zone ends
+  up over-served, and the orders that go unserved are the ones in the
+  zones nobody was told about.
+
+  That corrects this project's own previous conclusion. The last pass
+  called the broadcast 'the actual defect' on the strength of one run
+  in a scarce market. It IS a defect -- in the other regime, the one
+  that run could not see. A defect measured in the regime where it
+  cannot bite reads as a design principle.
+
+  The capacity cap is what stops the herd forming, and it does it by
+  refusing to make the same recommendation twice rather than by asking
+  couriers to be less obedient. Section D's finding survives with its
+  scope corrected: raising COMPLIANCE was never the lever. Changing
+  what is recommended is, once there is enough supply for the choice
+  to matter.
 

@@ -309,6 +309,109 @@ def main():
     emit("")
     summary["repositioning"] = R.round(4).to_dict("records")
 
+    # ======================================================================
+    emit("=" * 78)
+    emit("E. PER-COURIER RECOMMENDATIONS -- THE FIX THE LAST SECTION ASKED FOR")
+    emit("=" * 78)
+    emit("The section above ended by saying the defect was the BROADCAST: a zone")
+    emit("that is three couriers short should be offered to three couriers, not")
+    emit("to the fleet. That is now built -- an assignment with per-zone capacity")
+    emit("caps instead of an argmax everybody can compute for themselves.")
+    emit("")
+    sweep = []
+    for ratio in (0.65, 0.90, 1.20, 1.60):
+        nc = int(demand.sum() * ratio / 2.0)
+        row = dict(capacity=ratio, couriers=nc,
+                   oracle=CTL.oracle_fill(demand, nc, 2.0))
+        for tag, fn in (("broadcast", CTL.reposition),
+                        ("targeted", CTL.reposition_targeted)):
+            rng2 = np.random.default_rng(11)
+            zone2 = rng2.integers(0, n_zones, nc)
+            ctrls = [CTL.SurgeController() for _ in range(n_zones)]
+            sv = uv = 0.0
+            hh = []
+            for _ in range(steps):
+                counts = np.bincount(zone2, minlength=n_zones).astype(float)
+                util = np.clip(demand / np.maximum(counts, 1e-6) / 2.0, 0, 1)
+                sg = np.array([c.observe(u) for c, u in zip(ctrls, util)])
+                srv = np.minimum(demand, counts * 2.0)
+                sv += float(srv.sum())
+                uv += float((demand - srv).sum())
+                hh.append(CTL.herding_index(counts))
+                idle2 = rng2.random(nc) < 0.35
+                zone2 = fn(zone2, idle2, demand, counts, travel, sg, rng2,
+                           compliance=1.0)
+            row[tag] = sv / (sv + uv)
+            row[tag + "_herd"] = float(np.mean(hh))
+        row["headroom"] = row["oracle"] - row["broadcast"]
+        row["gap_closed"] = ((row["targeted"] - row["broadcast"]) /
+                             row["headroom"]) if row["headroom"] > 0.005 else float("nan")
+        sweep.append(row)
+    S = pd.DataFrame(sweep)
+    emit(S.to_string(index=False, float_format=lambda x: "%10.4f" % x,
+                     na_rep="       n/a"))
+    emit("")
+    tight, slack = S.iloc[0], S.iloc[2]
+    emit("CHECK THE CEILING BEFORE READING THE FIRST ROW.")
+    emit("")
+    emit("  Best fill ANY placement of %d couriers could reach : %.4f"
+         % (tight.couriers, tight.oracle))
+    emit("  Broadcast, 100%% compliance                        : %.4f"
+         % tight.broadcast)
+    emit("  Targeted, 100%% compliance                         : %.4f"
+         % tight.targeted)
+    emit("")
+    emit("  THE BROADCAST POLICY WAS ALREADY AT THE CEILING -- %.4f of headroom"
+         % tight.headroom)
+    emit("  on a %.4f maximum. There was no fill rate left for a smarter policy" % tight.oracle)
+    emit("  to win, so `gap_closed` is not reported for that row: a ratio whose")
+    emit("  denominator is noise is noise with a percent sign.")
+    emit("")
+    emit("  WHICH MEANS THE HERDING MEASURED IN SECTION D WAS NOT A PATHOLOGY.")
+    emit("  IT WAS THE OPTIMUM. With demand this concentrated and capacity at")
+    emit("  %.0f%% of it, every courier belongs in one of the three busy zones and"
+         % (100 * tight.couriers * 2 / demand.sum()))
+    emit("  a policy that spread them out would serve FEWER orders. Targeting")
+    emit("  still lowers herding here (%.4f against %.4f) and buys nothing for it."
+         % (tight.targeted_herd, tight.broadcast_herd))
+    emit("")
+    emit("  Without the ceiling, 'the smarter policy did not help' and 'there was")
+    emit("  nothing left to win' look identical in the fill-rate column, and they")
+    emit("  call for opposite decisions.")
+    emit("")
+    emit("SO THE QUESTION IS NOT WHETHER TARGETING HELPS. IT IS WHERE.")
+    emit("")
+    emit("  At %.0f%% capacity the broadcast gives up %.4f and targeting recovers"
+         % (100 * slack.capacity, slack.headroom))
+    emit("  %.0f%% of it, at %.0f%% less herding."
+         % (100 * slack.gap_closed,
+            100 * (1 - slack.targeted_herd / slack.broadcast_herd)))
+    emit("")
+    emit("  WHETHER THE PER-COURIER RECOMMENDATION IS WORTH BUILDING IS A")
+    emit("  PROPERTY OF HOW SHORT THE MARKET IS. In a market short enough that")
+    emit("  every courier belongs in a busy zone, a broadcast IS the assignment")
+    emit("  and the capacity caps never bind. Once supply can cover demand the")
+    emit("  broadcast overshoots: everybody chases the same zone, that zone ends")
+    emit("  up over-served, and the orders that go unserved are the ones in the")
+    emit("  zones nobody was told about.")
+    emit("")
+    emit("  That corrects this project's own previous conclusion. The last pass")
+    emit("  called the broadcast 'the actual defect' on the strength of one run")
+    emit("  in a scarce market. It IS a defect -- in the other regime, the one")
+    emit("  that run could not see. A defect measured in the regime where it")
+    emit("  cannot bite reads as a design principle.")
+    emit("")
+    emit("  The capacity cap is what stops the herd forming, and it does it by")
+    emit("  refusing to make the same recommendation twice rather than by asking")
+    emit("  couriers to be less obedient. Section D's finding survives with its")
+    emit("  scope corrected: raising COMPLIANCE was never the lever. Changing")
+    emit("  what is recommended is, once there is enough supply for the choice")
+    emit("  to matter.")
+    emit("")
+    summary["targeted_repositioning"] = dict(
+        ceiling=float(S.iloc[0]["oracle"]),
+        sweep=S.round(4).to_dict("records"))
+
     with open(os.path.join(OUT, "complete_report.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     with open(os.path.join(OUT, "complete_metrics.json"), "w") as f:

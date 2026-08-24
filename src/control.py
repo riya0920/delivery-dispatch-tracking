@@ -174,6 +174,101 @@ def reposition(courier_zone: np.ndarray, idle: np.ndarray,
     return out
 
 
+def oracle_fill(demand_forecast: np.ndarray, n_couriers: int,
+                served_per_courier: float = 2.0) -> float:
+    """The best fill rate ANY placement of this many couriers could achieve.
+
+    WHY A POLICY COMPARISON NEEDS THIS. Two policies that both score 0.636 have
+    either both failed or both succeeded, and the fill rate alone cannot say
+    which. Without the ceiling, the honest-looking conclusion "the smarter policy
+    did not help" is indistinguishable from "there was nothing left to win", and
+    those call for opposite decisions.
+
+    Greedy is exact here because every courier serves the same fixed amount and
+    the objective is a sum of concave per-zone caps: taking the largest remaining
+    marginal gain each time cannot be improved on.
+    """
+    n_zones = len(demand_forecast)
+    place = np.zeros(n_zones, dtype=int)
+    left = int(n_couriers)
+    rate = max(served_per_courier, 1e-9)
+    while left > 0:
+        gain = np.minimum(demand_forecast - place * rate, rate)
+        gain = np.maximum(gain, 0.0)
+        if gain.max() <= 1e-9:
+            break
+        place[int(np.argmax(gain))] += 1
+        left -= 1
+    served = float(np.minimum(demand_forecast, place * rate).sum())
+    return served / max(float(demand_forecast.sum()), 1e-9)
+
+
+def reposition_targeted(courier_zone: np.ndarray, idle: np.ndarray,
+                        demand_forecast: np.ndarray, supply: np.ndarray,
+                        travel_minutes: np.ndarray, surge: np.ndarray,
+                        rng: np.random.Generator,
+                        served_per_courier: float = 2.0,
+                        move_threshold: float = 1.25,
+                        compliance: float = 0.55) -> np.ndarray:
+    """Per-courier recommendations instead of one broadcast.
+
+    THIS IS THE FIX FOR THE RESULT THE BROADCAST VERSION PRODUCED. There,
+    going from 55% compliance to 100% moved fill rate by -0.0003 and raised
+    herding from 0.198 to 0.220: when everybody obeys the same recommendation,
+    everybody goes to the same zone, which serves it twice over and leaves the
+    others exactly as short. The thundering herd was not a bug in the policy, it
+    was what the policy SAID once everyone followed it.
+
+    A zone that is three couriers short is offered to three couriers, not to the
+    fleet. `need` is the deficit in courier-equivalents, and it is the cap: the
+    recommendation is an assignment with capacities rather than an argmax
+    everybody can compute for themselves.
+
+    Greedy by gain, which is not optimal and is honest about it: the optimal
+    assignment here is a transportation problem, and greedy-by-gain can strand a
+    courier whose only good option was taken by someone marginally better placed.
+    Measured against the broadcast policy the difference that matters is the
+    CAPACITY CONSTRAINT rather than the optimality of the matching, and a Hungarian
+    solve would obscure that by changing two things at once.
+
+    A DECLINED OFFER DOES NOT CONSUME THE SLOT. The dispatcher keeps offering
+    until the deficit is filled, which is what a system with acknowledgements
+    does. The alternative -- consuming the slot on offer, modelling a dispatcher
+    who cannot observe compliance -- makes low compliance look worse for a
+    modelling reason rather than a behavioural one, and would have quietly built
+    the conclusion into the setup.
+    """
+    n_zones = len(demand_forecast)
+    out = courier_zone.copy()
+    slots = np.maximum(
+        np.round(demand_forecast / max(served_per_courier, 1e-9) - supply),
+        0.0).astype(int)
+    value = surge * demand_forecast / np.maximum(supply, 1.0)
+
+    idle_idx = np.flatnonzero(idle)
+    rng.shuffle(idle_idx)
+    cands = []
+    for i in idle_idx:
+        here = int(courier_zone[i])
+        net = value / (1.0 + travel_minutes[here] / 12.0)
+        for z in range(n_zones):
+            if z == here or slots[z] <= 0:
+                continue
+            if net[z] > move_threshold * net[here]:
+                cands.append((float(net[z] - net[here]), int(i), z))
+    cands.sort(key=lambda t: -t[0])
+
+    assigned = set()
+    for _gain, i, z in cands:
+        if i in assigned or slots[z] <= 0:
+            continue
+        assigned.add(i)
+        if rng.random() < compliance:
+            out[i] = z
+            slots[z] -= 1
+    return out
+
+
 def herding_index(zone_counts: np.ndarray) -> float:
     """Concentration of couriers across zones, 0 = even, 1 = all in one place.
 

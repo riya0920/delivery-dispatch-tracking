@@ -4,15 +4,16 @@
 exactly-one-assignment under concurrency, calibrated ETA intervals, WISMO
 degradation drills, courier agents with a re-offer cascade, **a directed road
 network with one-ways and traffic**, **a learned ETA scored against a fair
-analytic baseline**, **surge that does not oscillate**, and **couriers that
-reposition**.
+analytic baseline**, **surge that does not oscillate**, **couriers that
+reposition**, and **per-courier recommendations measured against the best
+placement any policy could reach**.
 
-The last of those produced the most uncomfortable result in the project.
+The last of those overturned this project's own previous conclusion.
 
 ```bash
 python run_dispatch.py       # ~3min  geo benchmark, assignment, ETA, drills, cascade
 python run_complete.py       # ~4min  road network, learned ETA, surge control, repositioning
-python -m pytest tests -q    # 61 tests
+python -m pytest tests -q    # 73 tests
 ```
 
 ## A road network — what haversine was costing
@@ -132,13 +133,9 @@ serves that zone twice over and leaves the others exactly as short as before.
 **The thundering herd is not a bug in the policy; it is what the policy says when
 everyone follows it.**
 
-The practical reading is uncomfortable and worth stating: **the partial compliance
-a dispatch team spends money trying to increase is doing useful randomisation for
-free.** Spending on incentives to raise compliance, without also making the
-recommendation courier-specific, buys herding rather than coverage. The fix is not
-more compliance — it is a recommendation that differs per courier: assign zones
-rather than broadcast them, or price the zone down as couriers commit to it.
-Neither is built here.
+The practical reading: **the partial compliance a dispatch team spends money
+trying to increase is doing useful randomisation for free.** Raising compliance,
+without changing what is recommended, buys herding rather than coverage.
 
 What repositioning unambiguously *does* buy is the first step: **0.429 → 0.634, or
 48% more orders served with the same fleet.** Couriers sitting where demand was
@@ -147,6 +144,65 @@ yesterday is the cheapest supply problem a marketplace has.
 **Herding is the number that says whether a policy fixed the shortage or moved
 it.** Reporting fill rate without it would have made the 100% row look like a tie
 rather than a failure mode.
+
+## Per-courier recommendations — and the ceiling that reframed the section above
+
+The section above ended by naming the broadcast as *"the actual defect"*: a zone
+three couriers short should be offered to three couriers, not to the fleet. That
+is now built — an assignment with per-zone capacity caps instead of an argmax
+every courier can compute for themselves.
+
+**The first thing to do with it was check the ceiling, and the ceiling changed the
+conclusion.**
+
+| capacity | oracle | broadcast | herding | targeted | herding | headroom | gap closed |
+|---|---|---|---|---|---|---|---|
+| **65%** | 0.6374 | 0.6359 | 0.2397 | 0.6358 | 0.2131 | **0.0014** | *n/a* |
+| 90% | 0.8791 | 0.8738 | 0.1980 | 0.8769 | 0.1988 | 0.0053 | 0.58 |
+| **120%** | 1.0000 | 0.9469 | 0.1460 | **0.9984** | **0.0982** | **0.0531** | **0.97** |
+| 160% | 1.0000 | 0.9748 | 0.1229 | **0.9990** | **0.0426** | 0.0252 | 0.96 |
+
+`oracle` is the best fill rate *any* placement of that many couriers could reach.
+
+**In the scarce market where the compliance result was measured, the broadcast was
+already at the ceiling** — 0.0014 of headroom on a 0.6374 maximum. There was no
+fill rate left for a smarter policy to win, **which means the herding measured
+above was not a pathology. It was the optimum.** With demand this concentrated and
+capacity at 64% of it, every courier belongs in one of the three busy zones, and a
+policy that spread them out would serve *fewer* orders.
+
+`gap_closed` is not reported for that row on purpose: a ratio whose denominator is
+noise is noise with a percent sign.
+
+**Without the ceiling, "the smarter policy did not help" and "there was nothing
+left to win" look identical in the fill-rate column — and they call for opposite
+decisions.**
+
+So the question is not whether targeting helps. It is **where**. At 120% capacity
+the broadcast gives up 0.0531 of fill and targeting recovers **97% of it, at 33%
+less herding**. Once supply can cover demand the broadcast overshoots: everybody
+chases the same zone, that zone ends up over-served, and the orders that go
+unserved are the ones in the zones nobody was told about.
+
+> **This corrects this project's own previous conclusion.** The last pass called
+> the broadcast "the actual defect" on the strength of one run in a scarce market.
+> It *is* a defect — in the other regime, the one that run could not see. **A
+> defect measured where it cannot bite reads as a design principle.**
+
+Section D's finding survives with its scope corrected: **raising compliance was
+never the lever.** Changing what is recommended is — once there is enough supply
+for the choice to matter. And the capacity cap does it by refusing to make the
+same recommendation twice, rather than by asking couriers to be less obedient.
+
+> A declined offer does **not** consume the slot; the dispatcher keeps offering
+> until the deficit is filled. The alternative — consuming it on offer — makes low
+> compliance look worse for a modelling reason rather than a behavioural one, and
+> would have built the conclusion into the setup.
+
+> The greedy assignment is not optimal and says so. The exact version is a
+> transportation problem; measured against the broadcast, what matters is the
+> capacity *constraint* rather than the optimality of the matching, and a
+> Hungarian solve would have changed two things at once.
 
 This is also the carryover mechanism DATA-3 reasons about qualitatively and cannot
 represent: couriers moving between zones is what makes a courier-incentive
@@ -179,8 +235,14 @@ there in block 4.
   machine and a rendered message, not a client.
 - **Courier agents still drive only the cascade benchmark**; the geo benchmark and
   the ETA evaluation use the static availability mask.
-- **The repositioning recommendation is broadcast, not per-courier** — which the
-  compliance result above says is the actual defect.
+- **The repositioning recommendation is not priced.** Capacity caps decide who is
+  asked; a real system also moves the surge multiplier down as couriers commit to
+  a zone, so the incentive and the assignment stop disagreeing. Only the
+  assignment half is built.
+- **Zone demand is known rather than forecast.** Repositioning acts on
+  `demand_forecast` and the simulator hands it the truth, so none of these fill
+  rates carry forecast error. That flatters every policy here equally, and it
+  flatters targeting most, because capacity caps are computed from it.
 - **No dispatch dashboard.** The runbook references metrics the report computes;
   nothing renders or alerts on them.
 - **Single process, single metro, no persistence.** The queue-and-drain drill is
