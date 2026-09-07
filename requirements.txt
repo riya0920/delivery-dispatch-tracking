@@ -2,4 +2,5 @@ lightgbm
 numpy
 pandas
 pytest
+scikit-learn
 scipy
