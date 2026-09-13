@@ -1,4 +1,4 @@
-"""A real street network from OpenStreetMap — the caveat this project kept.
+"""A real street network from OpenStreetMap: the caveat this project kept.
 
 WHAT THIS PROJECT SAID, TWICE
 -----------------------------

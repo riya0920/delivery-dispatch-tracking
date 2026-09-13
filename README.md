@@ -1,4 +1,4 @@
-# SE-3 — Delivery Dispatch & Tracking
+# SE-3: Delivery Dispatch & Tracking
 
 **Complete against the spec.** A four-way geo-index benchmark with a scale sweep,
 exactly-one-assignment under concurrency, calibrated ETA intervals, WISMO
@@ -16,7 +16,7 @@ python run_complete.py       # ~4min  road network, learned ETA, surge control, 
 python -m pytest tests -q    # 83 tests
 ```
 
-## A road network — what haversine was costing
+## A road network: what haversine was costing
 
 This is **not OSM**. There is no extract to download here and no routing server to
 run, and calling a synthetic grid "a road network" without saying so would be the
@@ -37,16 +37,16 @@ measured rather than asserted.
 
 The **distribution** matters more than the mean, and this is why: a mean detour
 factor can be applied as a multiplier by anyone who cannot run a router, but the
-p99 of 1.72 cannot — the trips that blow the ETA are the ones in the tail, and
+p99 of 1.72 cannot; the trips that blow the ETA are the ones in the tail, and
 multiplying them by the mean leaves them just as wrong.
 
-The same route at five times of day: **552 s at 03:00, 974 s at 08:30** — rush
+The same route at five times of day: **552 s at 03:00, 974 s at 08:30**: rush
 hour costs **76%**. Haversine has no clock at all, so every ETA built on it is the
 same at 08:30 as at 03:00.
 
 **Route asymmetry from one-ways: 7.7%.** Haversine guarantees `d(a,b) = d(b,a)`,
 and an assignment scorer that caches "the distance between a and b" is now wrong
-half the time — which is a **correctness** bug rather than an accuracy one.
+half the time, which is a **correctness** bug rather than an accuracy one.
 
 > **A routing bug that returns haversine looks exactly like a working router.**
 > The first version had one-ways restricting travel *across* a street rather than
@@ -66,7 +66,7 @@ half the time — which is a **correctness** bug rather than an accuracy one.
 The analytic model is the **baseline, not the straw man**: it is given every
 *additive* term the generator uses, including the per-item time and the mean of
 the prep noise. The learned model's only structural advantage is an **interaction**
-the generator plants and an additive model cannot express — a large order at a
+the generator plants and an additive model cannot express: a large order at a
 slow restaurant during peak is worse than the sum of those three effects, because
 a busy kitchen degrades non-linearly. Naming the advantage is what makes this a
 measurement rather than "ML is better".
@@ -78,7 +78,7 @@ measurement rather than "ML is better".
 **But look at the lateness columns, not the MAE.** An ETA is a *promise*, and the
 cost of breaking it is asymmetric: five minutes early is a pleasant surprise, five
 minutes late is a support contact. **A mean ETA is late half the time by
-construction** — which is what the ~48% says. The P80 is *worse* on MAE and is the
+construction**, which is what the ~48% says. The P80 is *worse* on MAE and is the
 one to ship, because the customer-facing question is not "what is the expected
 arrival" but "what time can I promise". **Choosing an ETA model on MAE optimises a
 quantity nobody experiences.**
@@ -95,11 +95,11 @@ why both are kept.
 | hysteresis + forecast + rate limit | **65** | 0.0254 | 0.318 |
 
 **Reversals are the number a courier experiences.** A price that goes up, down, up
-and down within an hour is not a signal — it is noise with a dollar sign, and
+and down within an hour is not a signal; it is noise with a dollar sign, and
 couriers stop believing it.
 
 Three mechanisms, each fixing a different failure. **Hysteresis** gives separate
-on and off thresholds so the controller cannot chatter across a single line — and
+on and off thresholds so the controller cannot chatter across a single line, and
 the constructor *raises* if the gap is missing, because a controller that claims
 hysteresis and has one threshold is worse than one that never claimed it. A
 **forecast** acts on where utilisation is going, because supply responds with a
@@ -116,7 +116,7 @@ against a 2.5 ceiling, so the cap shaped nothing and a test pinned that fact. Th
 controller reaches its cap, and the cap is now a constraint somebody has to sign
 off rather than a comment.
 
-## Couriers that reposition — and the result I did not expect
+## Couriers that reposition, and the result I did not expect
 
 29 couriers against demand of 91: capacity is **64%** of demand.
 
@@ -128,7 +128,7 @@ off rather than a comment.
 
 **Perfect compliance buys nothing.** Going from 55% to 100% moves fill rate by
 **−0.0003** while raising the herding index from 0.198 to 0.220. Every courier
-obeying the same recommendation sends every courier to the same zone — which
+obeying the same recommendation sends every courier to the same zone, which
 serves that zone twice over and leaves the others exactly as short as before.
 **The thundering herd is not a bug in the policy; it is what the policy says when
 everyone follows it.**
@@ -145,11 +145,11 @@ yesterday is the cheapest supply problem a marketplace has.
 it.** Reporting fill rate without it would have made the 100% row look like a tie
 rather than a failure mode.
 
-## Per-courier recommendations — and the ceiling that reframed the section above
+## Per-courier recommendations, and the ceiling that reframed the section above
 
 The section above ended by naming the broadcast as *"the actual defect"*: a zone
 three couriers short should be offered to three couriers, not to the fleet. That
-is now built — an assignment with per-zone capacity caps instead of an argmax
+is now built: an assignment with per-zone capacity caps instead of an argmax
 every courier can compute for themselves.
 
 **The first thing to do with it was check the ceiling, and the ceiling changed the
@@ -165,7 +165,7 @@ conclusion.**
 `oracle` is the best fill rate *any* placement of that many couriers could reach.
 
 **In the scarce market where the compliance result was measured, the broadcast was
-already at the ceiling** — 0.0014 of headroom on a 0.6374 maximum. There was no
+already at the ceiling**: 0.0014 of headroom on a 0.6374 maximum. There was no
 fill rate left for a smarter policy to win, **which means the herding measured
 above was not a pathology. It was the optimum.** With demand this concentrated and
 capacity at 64% of it, every courier belongs in one of the three busy zones, and a
@@ -175,7 +175,7 @@ policy that spread them out would serve *fewer* orders.
 noise is noise with a percent sign.
 
 **Without the ceiling, "the smarter policy did not help" and "there was nothing
-left to win" look identical in the fill-rate column — and they call for opposite
+left to win" look identical in the fill-rate column, and they call for opposite
 decisions.**
 
 So the question is not whether targeting helps. It is **where**. At 120% capacity
@@ -186,16 +186,16 @@ unserved are the ones in the zones nobody was told about.
 
 > **This corrects this project's own previous conclusion.** The last pass called
 > the broadcast "the actual defect" on the strength of one run in a scarce market.
-> It *is* a defect — in the other regime, the one that run could not see. **A
+> It *is* a defect, in the other regime, the one that run could not see. **A
 > defect measured where it cannot bite reads as a design principle.**
 
 Section D's finding survives with its scope corrected: **raising compliance was
-never the lever.** Changing what is recommended is — once there is enough supply
+never the lever.** Changing what is recommended is, once there is enough supply
 for the choice to matter. And the capacity cap does it by refusing to make the
 same recommendation twice, rather than by asking couriers to be less obedient.
 
 > A declined offer does **not** consume the slot; the dispatcher keeps offering
-> until the deficit is filled. The alternative — consuming it on offer — makes low
+> until the deficit is filled. The alternative, consuming it on offer, makes low
 > compliance look worse for a modelling reason rather than a behavioural one, and
 > would have built the conclusion into the setup.
 
@@ -225,11 +225,11 @@ there in block 4.
 - **The ETA's hand-picked sigma gave 49% coverage on an 80% interval.** Now fitted
   from residuals on a held-out half (0.894).
 
-## A real city — the grid, checked against Wilmington
+## A real city: the grid, checked against Wilmington
 
 Every pass carried this: *"Still not OSM. [...] the detour factor on a real metro
 is a different number."* That last clause is a prediction, and it is now tested
-against **real OpenStreetMap geometry** for Wilmington, Delaware — 3,136 road
+against **real OpenStreetMap geometry** for Wilmington, Delaware, 3,136 road
 ways, **50.6% of them one-way**, 16,501 nodes, fetched from the Overpass API.
 
 ```bash
@@ -239,13 +239,13 @@ python run_osm.py
 > `pyosmium` installs and then fails to import: its compiled extension is blocked
 > by this machine's Application Control policy. That one is a real block, unlike
 > the Postgres claim. Overpass JSON needs no compiled parser, so the data comes
-> that way — a bounding box, not a planet extract, which is the smaller and
+> that way: a bounding box, not a planet extract, which is the smaller and
 > honest claim.
 
 > Routing is restricted to the **largest strongly-connected component** (93% of
 > nodes). A bounding box cuts ways at its edge, leaving stubs a courier can enter
 > and not leave: **11.7% of random pairs were unreachable** before this, and
-> almost none of that is Wilmington — it's the box. *Strongly* connected, not
+> almost none of that is Wilmington; it's the box. *Strongly* connected, not
 > weakly: with one-ways, "connected if you ignore direction" is not the question
 > a courier asks.
 
@@ -258,14 +258,14 @@ python run_osm.py
 | ≥ 2,000 m | 1.44 | 1.36 | 1.87 | 1.48 |
 | ≥ 3,000 m | 1.37 | 1.34 | 1.73 | 1.44 |
 | ≥ 4,000 m | 1.34 | 1.39 | 1.61 | 1.45 |
-| ≥ 6,000 m | 1.32 | — | 1.53 | — |
+| ≥ 6,000 m | 1.32 | N/A | 1.53 | N/A |
 
 **The real detour factor falls 24% with trip length. The grid's is flat.**
 
 A barrier or a one-way pair costs a fixed number of metres, and a fixed number of
 metres is a bigger fraction of a short trip. **Deliveries are short trips.**
 
-On the shortest bucket the grid says 1.30 and the city says **1.75** — the grid
+On the shortest bucket the grid says 1.30 and the city says **1.75**; the grid
 **understates the detour by 34% exactly where the business lives**, and its p90
 there (1.52) is close to *half* the real one (3.03).
 
@@ -279,8 +279,8 @@ establishes it cannot be applied across trip lengths either. The grid's headline
 | | grid | Wilmington |
 |---|---|---|
 | routes where A→B ≠ B→A | 7.7% | **85.0%** |
-| mean gap when they differ | — | 7.5% |
-| p90 gap | — | 16.5% |
+| mean gap when they differ | N/A | 7.5% |
+| p90 gap | N/A | 16.5% |
 
 The previous pass called caching "the distance between a and b" a **correctness**
 bug and then understated how often it fires by **11×**. At 7.7% it reads as an
@@ -296,7 +296,7 @@ of the cache key.
   multipliers remain this project's own assumption and the rush-hour results are
   not validated by anything here. Only the geometry is.
 - **No turn restrictions.** `type=restriction` relations are not parsed, so every
-  junction permits every turn — which makes these detour factors a **lower
+  junction permits every turn, which makes these detour factors a **lower
   bound**.
 - **Not a routing service.** A* over 15k nodes in-process, no contraction
   hierarchies, no live traffic, and the ETA models were not refitted on it.
